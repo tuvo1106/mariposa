@@ -52,8 +52,9 @@ button, select, input { font: inherit; }
     0 14px 44px rgba(0, 0, 0, 0.75);
 }
 .titlebar {
-  height: 28px; display: flex; align-items: center; justify-content: center;
-  font: 15px var(--display); color: var(--title); text-shadow: 0 1px 0 #000;
+  height: 48px; display: flex; align-items: center; justify-content: center;
+  font: 28px var(--display); letter-spacing: 0.04em; color: var(--title);
+  text-shadow: 0 2px 0 #000, 0 0 14px rgba(255, 190, 0, 0.3);
   background: linear-gradient(180deg, #2d2d2d, #121212);
   border-bottom: 1px solid #000; box-shadow: 0 1px 0 #333; border-radius: 4px 4px 0 0;
 }
@@ -135,6 +136,7 @@ select.pill {
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8'%3E%3Cpath d='M0 0h10L5 8z' fill='%23ffd100'/%3E%3C/svg%3E") right 12px center no-repeat, var(--metal);
 }
 select.pill option { background: #1a1a1a; color: var(--text-1); }
+#range-select { text-align: center; text-align-last: center; padding-left: 32px; }
 
 .btn-red {
   padding: 5px 26px; cursor: pointer;
@@ -240,6 +242,7 @@ details .table-wrap { margin-top: 8px; max-height: 320px; overflow-y: auto; }
   body { padding: 0; }
   .window { border-radius: 0; }
   .window-body { padding: 10px 12px 12px; }
+  .titlebar { height: 40px; font-size: 22px; }
   .inset { grid-template-columns: minmax(0, 1fr); min-height: 0; }
   .sidebar { padding: 12px; border-right: 0; box-shadow: none; border-bottom: 1px solid #000; }
   .nav-group + .nav-group { margin-top: 12px; }
@@ -279,7 +282,7 @@ details .table-wrap { margin-top: 8px; max-height: 320px; overflow-y: auto; }
           <h2 id="page-title">Overview</h2>
           <div class="stepper" role="group" aria-label="Date range">
             <button type="button" class="arrow prev" id="range-prev" aria-label="Shorter range"></button>
-            <span class="pill" id="range-label" aria-live="polite"></span>
+            <select class="pill" id="range-select" aria-label="Date range"></select>
             <button type="button" class="arrow next" id="range-next" aria-label="Longer range"></button>
           </div>
         </div>
@@ -826,7 +829,7 @@ function renderNav() {
   mark("page-nav", state.page);
   mark("pocket-nav", state.pocket);
   const i = RANGES.findIndex(([v]) => v === state.range);
-  document.getElementById("range-label").textContent = RANGES[i][1];
+  document.getElementById("range-select").value = String(RANGES[i][0]);
   document.getElementById("range-prev").disabled = i === 0;
   document.getElementById("range-next").disabled = i === RANGES.length - 1;
 }
@@ -974,6 +977,13 @@ document.getElementById("search").addEventListener("input", e => {
   state.ledgerShown = LEDGER_PAGE;
   if (state.query && state.page !== "ledger") showPage("ledger");
   renderLedger();
+});
+const rangeSelect = document.getElementById("range-select");
+rangeSelect.replaceChildren(...RANGES.map(([v, text]) => el("option", { value: String(v) }, text)));
+rangeSelect.addEventListener("change", () => {
+  state.range = RANGES.find(([v]) => String(v) === rangeSelect.value)[0];
+  state.ledgerShown = LEDGER_PAGE;
+  update();
 });
 document.getElementById("range-prev").addEventListener("click", () => stepRange(-1));
 document.getElementById("range-next").addEventListener("click", () => stepRange(1));
