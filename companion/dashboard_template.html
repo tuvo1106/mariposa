@@ -5,156 +5,196 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mariposa Gold Ledger</title>
 <style>
+/* World of Warcraft–style frames. Dark only, like the game's UI. */
 :root {
-  color-scheme: light;
-  --page: #f9f9f7;
-  --surface: #fcfcfb;
-  --text-1: #0b0b0b;
-  --text-2: #52514e;
-  --muted: #898781;
-  --grid: #e1e0d9;
-  --baseline: #c3c2b7;
-  --border: rgba(11, 11, 11, 0.10);
-  --wash: rgba(11, 11, 11, 0.04);
-  --income: #2a78d6;
-  --expense: #e34948;
-  --worth: #2a78d6;
-  --up: #006300;
-  --down: #d03b3b;
-  --brand: #eb6834;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --page: #0d0d0d;
-    --surface: #1a1a19;
-    --text-1: #f0efec;
-    --text-2: #c3c2b7;
-    --muted: #898781;
-    --grid: #2c2c2a;
-    --baseline: #383835;
-    --border: rgba(255, 255, 255, 0.10);
-    --wash: rgba(255, 255, 255, 0.05);
-    --income: #3987e5;
-    --expense: #e66767;
-    --worth: #3987e5;
-    --up: #0ca30c;
-    --down: #e66767;
-    --brand: #d95926;
-  }
-}
-:root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #0d0d0d;
-  --surface: #1a1a19;
-  --text-1: #f0efec;
-  --text-2: #c3c2b7;
-  --muted: #898781;
-  --grid: #2c2c2a;
-  --baseline: #383835;
-  --border: rgba(255, 255, 255, 0.10);
-  --wash: rgba(255, 255, 255, 0.05);
-  --income: #3987e5;
-  --expense: #e66767;
-  --worth: #3987e5;
-  --up: #0ca30c;
-  --down: #e66767;
-  --brand: #d95926;
+  --page: #0b0907;
+  --panel-top: #1e1810;
+  --panel-bottom: #110d09;
+  --surface: #15110c;          /* behind chart marks: ring and gap color */
+  --frame: #8a6d32;            /* bronze border */
+  --frame-hi: #e0bd6a;         /* gold highlight */
+  --text-1: #f3ead6;
+  --text-2: #b9aa8b;
+  --muted: #8a7c63;
+  --title: #ffd100;            /* the game's yellow label color */
+  --grid: rgba(224, 189, 106, 0.10);
+  --baseline: rgba(224, 189, 106, 0.35);
+  --wash: rgba(255, 209, 0, 0.07);
+  --highlight: rgba(80, 150, 255, 0.14);  /* list hover, like the game's blue row highlight */
+  --income: #0070dd;           /* "rare" item blue */
+  --expense: #e03c3c;
+  --worth: #f0c040;
+  --up: #1eff00;               /* "uncommon" item green */
+  --down: #ff3b30;
+  --display: "Friz Quadrata TT", "Friz Quadrata", Cinzel, "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --body: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --rivet: radial-gradient(circle, #f3d98a 0 1.4px, #6b5326 1.9px, transparent 2.6px);
 }
 
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  background: var(--page);
   color: var(--text-1);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 14px/1.45 var(--body);
+  background:
+    radial-gradient(ellipse 120% 50% at 50% -10%, rgba(255, 190, 90, 0.10), transparent 60%),
+    radial-gradient(ellipse at center, #17120c 0%, var(--page) 70%) fixed,
+    var(--page);
 }
 main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 48px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-header h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 8px; }
-header h1::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
-header .meta { color: var(--text-2); font-size: 13px; }
-header button { margin-left: auto; }
+/* Header ------------------------------------------------------------------ */
+header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+header h1 {
+  font: 700 28px/1.1 var(--display); letter-spacing: 0.03em; margin: 0;
+  color: var(--title); text-shadow: 0 2px 0 #000, 0 0 14px rgba(255, 170, 0, 0.25);
+  display: flex; align-items: center; gap: 10px;
+}
+header h1::before {
+  content: ""; width: 12px; height: 12px; transform: rotate(45deg);
+  background: linear-gradient(135deg, #ffb35c, #d95926 55%, #7a2a0c);
+  box-shadow: 0 0 0 1px #000, 0 0 0 2px var(--frame), 0 0 10px rgba(255, 120, 40, 0.5);
+}
+header .tagline { font: 600 14px var(--display); color: var(--text-2); letter-spacing: 0.04em; }
+header .meta { color: var(--muted); font-size: 13px; margin-left: auto; }
 
+/* Controls: red panel buttons with gold trim ------------------------------ */
 .filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
-.segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
-.segmented button { border: 0; border-radius: 0; border-right: 1px solid var(--border); }
-.segmented button:last-child { border-right: 0; }
-.segmented button[aria-pressed="true"] { background: var(--wash); color: var(--text-1); font-weight: 600; }
-button, select {
-  font: inherit; color: var(--text-2); background: var(--surface);
-  border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer;
+.segmented { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+button {
+  font: 700 13px var(--display); letter-spacing: 0.02em; color: var(--title);
+  background: linear-gradient(180deg, #7a1810 0%, #4e0d07 55%, #3a0904 100%);
+  border: 1px solid #000; border-radius: 3px; padding: 6px 14px; cursor: pointer;
+  text-shadow: 0 1px 0 #000;
+  box-shadow: inset 0 0 0 1px rgba(224, 189, 106, 0.55), inset 0 2px 0 rgba(255, 200, 150, 0.15), 0 1px 2px rgba(0, 0, 0, 0.6);
 }
-button:hover, select:hover { color: var(--text-1); }
+button:hover { filter: brightness(1.25); }
+button:active { background: linear-gradient(180deg, #3a0904, #5e120a); }
+.segmented button[aria-pressed="true"] {
+  color: #fff;
+  background: linear-gradient(180deg, #b52a18 0%, #74150a 60%, #5a0f06 100%);
+  box-shadow: inset 0 0 0 1px var(--frame-hi), 0 0 10px rgba(255, 170, 0, 0.35);
+}
+select {
+  font: 600 13px var(--display); color: var(--text-1);
+  background: linear-gradient(180deg, #1c1610, #0e0b08);
+  border: 1px solid var(--frame); border-radius: 3px; padding: 6px 10px; cursor: pointer;
+  box-shadow: inset 0 0 0 1px #000;
+}
+select option { background: var(--surface); color: var(--text-1); }
 button:focus-visible, select:focus-visible, svg:focus-visible, .bar-row:focus-visible {
-  outline: 2px solid var(--worth); outline-offset: 2px;
+  outline: 2px solid var(--title); outline-offset: 2px;
 }
 
+/* Frames -------------------------------------------------------------------- */
 .card {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-  padding: 16px; margin-bottom: 16px; min-width: 0;
+  position: relative; min-width: 0;
+  background: linear-gradient(180deg, var(--panel-top), var(--panel-bottom));
+  border: 1px solid var(--frame); border-radius: 4px;
+  padding: 18px; margin-bottom: 16px;
+  box-shadow:
+    0 0 0 1px #000,
+    inset 0 0 0 1px #000,
+    inset 0 0 0 2px rgba(224, 189, 106, 0.16),
+    inset 0 2px 0 2px rgba(255, 230, 160, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.55);
 }
-.card h2 { font-size: 14px; font-weight: 600; margin: 0 0 2px; }
-.card .sub { color: var(--text-2); font-size: 13px; margin: 0 0 12px; }
+/* Gold studs in each corner. */
+.card::before {
+  content: ""; position: absolute; inset: 3px; pointer-events: none;
+  background:
+    var(--rivet) left top / 6px 6px no-repeat,
+    var(--rivet) right top / 6px 6px no-repeat,
+    var(--rivet) left bottom / 6px 6px no-repeat,
+    var(--rivet) right bottom / 6px 6px no-repeat;
+}
+.card h2 {
+  font: 700 15px var(--display); letter-spacing: 0.04em; margin: 0 0 4px; padding-bottom: 6px;
+  color: var(--title); text-shadow: 0 1px 0 #000;
+  border-bottom: 1px solid; border-image: linear-gradient(90deg, rgba(224, 189, 106, 0.6), rgba(224, 189, 106, 0)) 1;
+}
+.card .sub { color: var(--text-2); font-size: 13px; margin: 6px 0 12px; }
 
+/* Stats --------------------------------------------------------------------- */
 .hero-row { display: grid; grid-template-columns: minmax(280px, 1.5fr) repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
 .hero-row .card { margin: 0; }
-.stat-label { color: var(--text-2); font-size: 13px; }
-.stat-value { font-size: 24px; font-weight: 600; margin-top: 4px; white-space: nowrap; }
-.hero .stat-value { font-size: clamp(28px, 2.6vw, 44px); line-height: 1.1; }
-.delta { font-size: 13px; margin-top: 4px; color: var(--text-2); }
+.stat-label { font: 700 12px var(--display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--title); }
+.stat-value { font: 700 22px var(--display); margin-top: 6px; white-space: nowrap; color: var(--text-1); text-shadow: 0 1px 0 #000; }
+.hero { border-color: var(--frame-hi); }
+.hero .stat-value {
+  font-size: clamp(26px, 2.5vw, 40px); line-height: 1.1;
+  color: var(--title); text-shadow: 0 2px 0 #000, 0 0 16px rgba(255, 190, 0, 0.25);
+}
+.delta { font-size: 13px; margin-top: 6px; color: var(--text-2); }
 .delta .good { color: var(--up); font-weight: 600; }
 .delta .bad { color: var(--down); font-weight: 600; }
 
-.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.grid-2 .card { margin: 0; }
-.grid-2 { margin-bottom: 16px; }
+/* Money with coin icons. */
+.money { position: relative; white-space: nowrap; }  /* keeps the .sr label inside table scrollers */
+.coin {
+  display: inline-block; width: 0.72em; height: 0.72em; border-radius: 50%;
+  margin-left: 0.2em; vertical-align: -0.02em;
+  box-shadow: inset 0 -1px 1px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.7);
+}
+.coin.g { background: radial-gradient(circle at 35% 30%, #fff6b0, #f2c230 45%, #a87a12); }
+.coin.s { background: radial-gradient(circle at 35% 30%, #ffffff, #c7c7cf 45%, #6f6f78); }
+.coin.c { background: radial-gradient(circle at 35% 30%, #ffd7b0, #d9894a 45%, #7a4318); }
 
+/* Charts -------------------------------------------------------------------- */
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+.grid-2 .card { margin: 0; }
 .legend { display: flex; gap: 16px; color: var(--text-2); font-size: 13px; margin-bottom: 8px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
-.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; box-shadow: 0 0 0 1px #000; }
 .chart { position: relative; width: 100%; }
 .chart svg { display: block; width: 100%; overflow: visible; }
 .chart text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
-.chart .end-label { fill: var(--text-1); font-size: 12px; font-weight: 600; }
+.chart .end-label { fill: var(--title); font: 700 12px var(--display); }
 
 .bars { display: flex; flex-direction: column; gap: 2px; }
 .bar-row {
   display: grid; grid-template-columns: minmax(96px, 34%) 1fr; align-items: center;
-  gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: default;
+  gap: 8px; padding: 4px 6px; border-radius: 3px; cursor: default;
 }
-.bar-row:hover, .bar-row:focus-visible { background: var(--wash); }
+.bar-row:hover, .bar-row:focus-visible { background: var(--highlight); }
 .bar-label { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar-track { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.bar { height: 16px; border-radius: 0 4px 4px 0; flex: none; min-width: 2px; }
+.bar { height: 14px; border-radius: 0 4px 4px 0; flex: none; min-width: 2px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.6); }
 .bar-value { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-1); }
-.empty { color: var(--muted); padding: 24px 0; text-align: center; }
+.empty { color: var(--muted); padding: 24px 0; text-align: center; font-family: var(--display); }
 
+/* Tables -------------------------------------------------------------------- */
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-th { text-align: left; font-weight: 600; color: var(--text-2); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th {
+  text-align: left; font: 700 12px var(--display); letter-spacing: 0.04em; color: var(--title);
+  padding: 6px 8px; border-bottom: 1px solid var(--baseline); white-space: nowrap;
+}
 td { padding: 6px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+tbody tr:nth-child(even) td { background: rgba(255, 255, 255, 0.02); }
+tbody tr:hover td { background: var(--highlight); }
 td.num, th.num { text-align: right; }
 td.ref { color: var(--text-2); max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
-tr.warband td:first-child { font-style: italic; }
 details { margin-top: 12px; }
-details summary { color: var(--text-2); cursor: pointer; font-size: 13px; }
+details summary { color: var(--title); cursor: pointer; font: 600 13px var(--display); }
 details .table-wrap { margin-top: 8px; max-height: 320px; overflow-y: auto; }
 .more { margin-top: 12px; }
 .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
 
+/* Tooltip, styled like the game's item tooltip. */
 #tip {
-  position: fixed; z-index: 10; pointer-events: none; min-width: 140px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-  padding: 8px 10px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); font-size: 13px;
+  position: fixed; z-index: 10; pointer-events: none; min-width: 150px;
+  background: linear-gradient(180deg, rgba(14, 14, 32, 0.96), rgba(6, 6, 16, 0.96));
+  border: 1px solid #6e6e8c; border-radius: 6px; padding: 8px 10px; font-size: 13px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 4px 16px rgba(0, 0, 0, 0.6);
 }
-#tip .tip-title { color: var(--text-2); margin-bottom: 4px; }
+#tip .tip-title { color: #fff; font: 700 14px var(--display); margin-bottom: 4px; }
 #tip .tip-row { display: flex; align-items: center; gap: 8px; }
 #tip .tip-key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
-#tip .tip-value { font-weight: 600; font-variant-numeric: tabular-nums; }
-#tip .tip-name { color: var(--text-2); }
+#tip .tip-value { color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; }
+#tip .tip-name { color: var(--title); }
 
 @media (max-width: 900px) {
   .hero-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -162,7 +202,8 @@ details .table-wrap { margin-top: 8px; max-height: 320px; overflow-y: auto; }
 }
 @media (max-width: 640px) {
   .grid-2 { grid-template-columns: minmax(0, 1fr); }
-  .stat-value { font-size: 20px; }
+  .stat-value { font-size: 19px; }
+  header .meta { margin-left: 0; width: 100%; }
 }
 </style>
 </head>
@@ -170,8 +211,8 @@ details .table-wrap { margin-top: 8px; max-height: 320px; overflow-y: auto; }
 <main>
   <header>
     <h1>Mariposa</h1>
+    <span class="tagline">Gold Ledger</span>
     <span class="meta" id="meta"></span>
-    <button type="button" id="theme">Theme</button>
   </header>
 
   <div class="filters">
@@ -262,6 +303,31 @@ function gold(copper, signed = false) {
   if (abs > 0 && abs < G) return sign + (abs >= 100 ? Math.floor(abs / 100) + "s" : abs + "c");
   return sign + nf.format(Math.round(abs / G)) + "g";
 }
+// The same amount as a node with coin icons, for stats and tables.
+function money(copper, signed = false) {
+  const abs = Math.round(Math.abs(copper));
+  const span = el("span", { class: "money" });
+  span.append(abs === 0 ? "" : copper < 0 ? "−" : signed ? "+" : "");
+  const coins = abs === 0 || abs >= G ? [[Math.round(abs / G), "g"]]
+    : abs >= 100 ? [[Math.floor(abs / 100), "s"]] : [[abs, "c"]];
+  for (const [n, unit] of coins) {
+    span.append(nf.format(n), el("i", { class: `coin ${unit}`, "aria-hidden": "true" }), el("span", { class: "sr" }, unit));
+  }
+  return span;
+}
+
+// RAID_CLASS_COLORS from the game; the warband uses the artifact item color.
+const CLASS_COLORS = {
+  DEATHKNIGHT: "#c41e3a", DEMONHUNTER: "#a330c9", DRUID: "#ff7c0a", EVOKER: "#33937f",
+  HUNTER: "#aad372", MAGE: "#3fc7eb", MONK: "#00ff98", PALADIN: "#f48cba", PRIEST: "#ffffff",
+  ROGUE: "#fff468", SHAMAN: "#0070dd", WARLOCK: "#8788ee", WARRIOR: "#c69b6d",
+};
+function nameNode(p) {
+  const span = el("span", {}, p.name);
+  span.style.color = p.kind === "warband" ? "#e6cc80" : CLASS_COLORS[p.cls] || "";
+  return span;
+}
+
 // Two decimals so neighboring axis ticks (3.5M, 3.55M) stay distinct.
 const compactFmt = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 });
 function compact(copper) {
@@ -299,13 +365,12 @@ function loadPrefs() {
     const saved = JSON.parse(localStorage.getItem("mariposa.filters") || "{}");
     if (RANGES.some(([v]) => v === saved.range)) state.range = saved.range;
     if (saved.pocket === "all" || D.pockets.some(p => p.key === saved.pocket)) state.pocket = saved.pocket;
-    if (saved.theme) document.documentElement.dataset.theme = saved.theme;
   } catch (_) { /* storage unavailable */ }
 }
 function savePrefs() {
   try {
     localStorage.setItem("mariposa.filters", JSON.stringify({
-      range: state.range, pocket: state.pocket, theme: document.documentElement.dataset.theme,
+      range: state.range, pocket: state.pocket,
     }));
   } catch (_) { /* storage unavailable */ }
 }
@@ -405,17 +470,18 @@ function svg(tag, attrs = {}, parent) {
   if (parent) parent.appendChild(e);
   return e;
 }
-function table(host, headers, rows, rowClass) {
+function table(host, headers, rows) {
   const t = el("table");
   const head = el("tr");
   headers.forEach(([text, num]) => head.appendChild(el("th", num ? { class: "num" } : {}, text)));
   t.appendChild(el("thead")).appendChild(head);
   const body = t.appendChild(el("tbody"));
-  rows.forEach((cells, i) => {
-    const tr = body.appendChild(el("tr", rowClass ? { class: rowClass(i) } : {}));
+  rows.forEach(cells => {
+    const tr = body.appendChild(el("tr"));
     cells.forEach((text, j) => {
       const cls = [headers[j][1] ? "num" : "", headers[j][2] || ""].join(" ").trim();
-      tr.appendChild(el("td", cls ? { class: cls } : {}, text));
+      const td = tr.appendChild(el("td", cls ? { class: cls } : {}));
+      if (text instanceof Node) td.appendChild(text); else td.textContent = text;
     });
   });
   host.replaceChildren(t);
@@ -618,7 +684,7 @@ function renderBars(host, entries, color, total) {
     const bar = track.appendChild(el("span", { class: "bar" }));
     bar.style.background = color;
     bar.style.width = `calc((100% - 96px) * ${Math.abs(amount) / max})`;
-    track.appendChild(el("span", { class: "bar-value" }, gold(amount)));
+    track.appendChild(el("span", { class: "bar-value" })).appendChild(money(amount));
     const tipRows = [{ value: gold(amount), name: `${share}% of total`, color }];
     row.addEventListener("pointermove", ev => showTip(ev.clientX, ev.clientY, label(cat), tipRows));
     row.addEventListener("pointerleave", hideTip);
@@ -689,7 +755,7 @@ function update() {
   document.getElementById("worth-sub").textContent = single
     ? "Balance at the end of each day, including transfers to and from your other characters."
     : "Balance at the end of each day. Transfers between your own characters don't change the total.";
-  document.getElementById("worth").textContent = gold(model.current);
+  document.getElementById("worth").replaceChildren(money(model.current));
   const change = model.current - model.startBalance;
   const wd = document.getElementById("worth-delta");
   wd.replaceChildren(
@@ -697,10 +763,10 @@ function update() {
       `${change > 0 ? "▲" : change < 0 ? "▼" : "→"} ${gold(change, true)}`),
     state.range === "all" ? " all time" : ` over ${state.range} days`);
 
-  document.getElementById("kpi-income").textContent = gold(cur.inc);
-  document.getElementById("kpi-expense").textContent = gold(cur.exp);
-  document.getElementById("kpi-net").textContent = gold(cur.inc + cur.exp, true);
-  document.getElementById("kpi-day").textContent = gold((cur.inc + cur.exp) / ndays, true);
+  document.getElementById("kpi-income").replaceChildren(money(cur.inc));
+  document.getElementById("kpi-expense").replaceChildren(money(cur.exp));
+  document.getElementById("kpi-net").replaceChildren(money(cur.inc + cur.exp, true));
+  document.getElementById("kpi-day").replaceChildren(money((cur.inc + cur.exp) / ndays, true));
   setDelta(document.getElementById("kpi-income-delta"), cur.inc, prev.inc, true);
   setDelta(document.getElementById("kpi-expense-delta"), -cur.exp, -prev.exp, false);
   setDelta(document.getElementById("kpi-net-delta"), cur.inc + cur.exp, prev.inc + prev.exp, true);
@@ -708,9 +774,9 @@ function update() {
 
   renderCharts();
   table(document.getElementById("worth-table"), [["Date"], ["Net worth", true]],
-    model.days.map((d, i) => [fmtDay(d), gold(model.worth[i])]).reverse());
+    model.days.map((d, i) => [fmtDay(d), money(model.worth[i])]).reverse());
   table(document.getElementById("daily-table"), [["Date"], ["Income", true], ["Expenses", true], ["Net", true]],
-    model.daily.map(d => [fmtDay(d.day), gold(d.inc, true), gold(d.exp, true), gold(d.inc + d.exp, true)]).reverse());
+    model.daily.map(d => [fmtDay(d.day), money(d.inc, true), money(d.exp, true), money(d.inc + d.exp, true)]).reverse());
 
   document.getElementById("income-sub").textContent = `${gold(cur.inc)} total`;
   document.getElementById("expense-sub").textContent = `${gold(cur.exp)} total`;
@@ -722,9 +788,8 @@ function update() {
     .filter(({ p }) => model.pocketIdx < 0 || p.key === state.pocket);
   table(document.getElementById("pockets-table"),
     [["Name"], ["Realm"], ["Balance", true], ["Income", true], ["Expenses", true], ["Transfers", true], ["Net", true]],
-    pocketRows.map(({ p, f }) => [p.name, p.realm, gold(p.gold), gold(f.inc, true), gold(f.exp, true),
-      gold(f.xfer, true), gold(f.inc + f.exp, true)]),
-    i => pocketRows[i].p.kind === "warband" ? "warband" : "");
+    pocketRows.map(({ p, f }) => [nameNode(p), p.realm, money(p.gold), money(f.inc, true), money(f.exp, true),
+      money(f.xfer, true), money(f.inc + f.exp, true)]));
 
   renderLedger();
 }
@@ -743,8 +808,8 @@ function renderLedger() {
     `${nf.format(rows.length)} transactions in range, newest first`;
   table(document.getElementById("ledger-table"),
     [["Time"], ["Character"], ["Category"], ["Amount", true], ["Detail", false, "ref"]],
-    shown.map(([pi, ts, amount, cat, ref]) => [timeFmt.format(new Date(ts * 1000)), D.pockets[pi].name,
-      label(cat) + (TRANSFERS.has(cat) ? " (transfer)" : ""), gold(amount, true), ref == null ? "" : String(ref)]));
+    shown.map(([pi, ts, amount, cat, ref]) => [timeFmt.format(new Date(ts * 1000)), nameNode(D.pockets[pi]),
+      label(cat) + (TRANSFERS.has(cat) ? " (transfer)" : ""), money(amount, true), ref == null ? "" : String(ref)]));
   document.getElementById("ledger-more").hidden = shown.length >= rows.length;
 }
 
@@ -757,12 +822,6 @@ document.getElementById("ledger-cat").addEventListener("change", e => {
 document.getElementById("ledger-more").addEventListener("click", () => {
   state.ledgerShown += LEDGER_PAGE;
   renderLedger();
-});
-document.getElementById("theme").addEventListener("click", () => {
-  const root = document.documentElement;
-  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-  root.dataset.theme = dark ? "light" : "dark";
-  savePrefs();
 });
 
 const pocketCount = D.pockets.filter(p => p.kind === "character").length;

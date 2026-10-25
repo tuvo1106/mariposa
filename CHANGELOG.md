@@ -21,4 +21,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Dashboard: styled after the WoW interface, with bronze-framed panels, red panel buttons,
+  gold titles, coin icons, class-colored character names, and a game-style tooltip. It's
+  dark only, like the game, so the light/dark toggle is gone.
+
 ### Fixed
