@@ -27,8 +27,10 @@ is the source of truth for *what* we're building; this file is *how*.
 - Guard any API that might not exist (`if C_Bank and C_Bank.DepositMoney`); registering an
   unknown event or hooking a missing function breaks the whole addon on load.
 - Amounts are always integer copper. Adding a category means touching
-  `Mariposa/Categories.lua`, plus `TRANSFER_CATEGORIES` in `companion/mariposa.py` if it's
-  a transfer.
+  `Mariposa/Categories.lua` and `CATEGORY_LABELS` in `companion/dashboard.py`, plus
+  `TRANSFER_CATEGORIES` in `companion/mariposa.py` if it's a transfer.
+- Dashboard changes: regenerate with synthetic data (see README) and look at it in light,
+  dark, and at phone width. Data text goes into the DOM via `textContent` only.
 - Changing the SavedVariables shape: bump `DB_VERSION` in `Core.lua`, migrate in `initDB`,
   and keep the importer reading both shapes.
 - The companion stays standard-library-only Python 3.

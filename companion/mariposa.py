@@ -7,6 +7,7 @@ either. Imports are idempotent: transactions are keyed by (character, seq).
     python3 mariposa.py                    # auto-detect WoW, write mariposa.db
     python3 mariposa.py --wtf PATH --db out.db --csv out.csv
     python3 mariposa.py --summary 7        # print last 7 days by category
+    python3 mariposa.py --dashboard dashboard.html
 """
 from __future__ import annotations
 
@@ -286,6 +287,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--db", type=Path, default=Path("mariposa.db"), help="SQLite output (default: mariposa.db)")
     ap.add_argument("--csv", type=Path, help="also export all transactions to this CSV")
     ap.add_argument("--summary", type=int, metavar="DAYS", help="print totals by category for the last DAYS days")
+    ap.add_argument("--dashboard", type=Path, metavar="HTML", help="write an offline HTML dashboard")
     args = ap.parse_args(argv)
 
     wtf = args.wtf or next((p for p in DEFAULT_WTF if p.is_dir()), None)
@@ -308,6 +310,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"wrote {args.csv}")
     if args.summary:
         print_summary(conn, args.summary)
+    if args.dashboard:
+        from dashboard import render_dashboard
+        render_dashboard(conn, args.dashboard, TRANSFER_CATEGORIES)
+        print(f"wrote {args.dashboard}")
     return 0
 
 
