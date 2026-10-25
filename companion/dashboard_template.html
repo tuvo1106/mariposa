@@ -5,23 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mariposa Gold Ledger</title>
 <style>
-/* World of Warcraft–style frames. Dark only, like the game's UI. */
+/* Styled after the game's Options window: charcoal frame, category sidebar,
+   yellow labels, gray value boxes, red buttons. Dark only, like the game. */
 :root {
   color-scheme: dark;
-  --page: #0b0907;
-  --panel-top: #1e1810;
-  --panel-bottom: #110d09;
-  --surface: #15110c;          /* behind chart marks: ring and gap color */
-  --frame: #8a6d32;            /* bronze border */
-  --frame-hi: #e0bd6a;         /* gold highlight */
-  --text-1: #f3ead6;
-  --text-2: #b9aa8b;
-  --muted: #8a7c63;
+  --surface: #141414;          /* behind chart marks: ring and gap color */
+  --text-1: #f5f5f5;
+  --text-2: #b3b3b3;
+  --muted: #858585;
   --title: #ffd100;            /* the game's yellow label color */
-  --grid: rgba(224, 189, 106, 0.10);
-  --baseline: rgba(224, 189, 106, 0.35);
-  --wash: rgba(255, 209, 0, 0.07);
-  --highlight: rgba(80, 150, 255, 0.14);  /* list hover, like the game's blue row highlight */
+  --grid: rgba(255, 255, 255, 0.07);
+  --baseline: rgba(255, 255, 255, 0.24);
+  --wash: rgba(255, 209, 0, 0.08);
+  --row-hover: rgba(255, 255, 255, 0.05);
   --income: #0070dd;           /* "rare" item blue */
   --expense: #e03c3c;
   --worth: #f0c040;
@@ -29,107 +25,139 @@
   --down: #ff3b30;
   --display: "Friz Quadrata TT", "Friz Quadrata", Cinzel, "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
   --body: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --rivet: radial-gradient(circle, #f3d98a 0 1.4px, #6b5326 1.9px, transparent 2.6px);
+  --metal: linear-gradient(180deg, #3b3b3b 0%, #262626 50%, #1d1d1d 100%);
 }
 
 * { box-sizing: border-box; }
 body {
-  margin: 0;
-  color: var(--text-1);
-  font: 14px/1.45 var(--body);
+  margin: 0; min-height: 100vh; padding: 24px 16px;
+  color: var(--text-1); font: 14px/1.45 var(--body);
   background:
-    radial-gradient(ellipse 120% 50% at 50% -10%, rgba(255, 190, 90, 0.10), transparent 60%),
-    radial-gradient(ellipse at center, #17120c 0%, var(--page) 70%) fixed,
-    var(--page);
+    radial-gradient(ellipse at 12% 18%, rgba(255, 110, 30, 0.13), transparent 40%),
+    radial-gradient(ellipse at 88% 8%, rgba(150, 95, 50, 0.14), transparent 45%),
+    radial-gradient(ellipse at 50% 120%, rgba(255, 90, 20, 0.08), transparent 50%),
+    #0c0b0a;
 }
-main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 48px; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+button, select, input { font: inherit; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--title); outline-offset: 2px; }
 
-/* Header ------------------------------------------------------------------ */
-header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
-header h1 {
-  font: 700 28px/1.1 var(--display); letter-spacing: 0.03em; margin: 0;
-  color: var(--title); text-shadow: 0 2px 0 #000, 0 0 14px rgba(255, 170, 0, 0.25);
-  display: flex; align-items: center; gap: 10px;
+/* Window ------------------------------------------------------------------- */
+.window {
+  max-width: 1200px; margin: 0 auto; padding: 3px;
+  background: linear-gradient(180deg, #1f1f1f, #161616);
+  border: 1px solid #000; border-radius: 6px;
+  box-shadow: inset 0 0 0 1px #4b4b4b, inset 0 0 0 2px #121212, inset 0 0 0 3px #2f2f2f,
+    0 14px 44px rgba(0, 0, 0, 0.75);
 }
-header h1::before {
-  content: ""; width: 12px; height: 12px; transform: rotate(45deg);
-  background: linear-gradient(135deg, #ffb35c, #d95926 55%, #7a2a0c);
-  box-shadow: 0 0 0 1px #000, 0 0 0 2px var(--frame), 0 0 10px rgba(255, 120, 40, 0.5);
+.titlebar {
+  height: 28px; display: flex; align-items: center; justify-content: center;
+  font: 15px var(--display); color: var(--title); text-shadow: 0 1px 0 #000;
+  background: linear-gradient(180deg, #2d2d2d, #121212);
+  border-bottom: 1px solid #000; box-shadow: 0 1px 0 #333; border-radius: 4px 4px 0 0;
 }
-header .tagline { font: 600 14px var(--display); color: var(--text-2); letter-spacing: 0.04em; }
-header .meta { color: var(--muted); font-size: 13px; margin-left: auto; }
+.window-body { padding: 12px 16px 14px; }
+.topbar { display: flex; justify-content: flex-end; }
+.search {
+  width: min(500px, 100%); height: 26px; padding: 0 10px 0 30px;
+  color: var(--text-1); background: #0b0b0b url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%23999' stroke-width='2'%3E%3Ccircle cx='6' cy='6' r='4.5'/%3E%3Cpath d='M9.5 9.5 13 13'/%3E%3C/svg%3E") 9px center no-repeat;
+  border: 1px solid #5a5a5a; border-radius: 3px; box-shadow: inset 0 1px 3px #000;
+}
+.search::placeholder { color: var(--muted); }
 
-/* Controls: red panel buttons with gold trim ------------------------------ */
-.filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
-.segmented { display: inline-flex; gap: 4px; flex-wrap: wrap; }
-button {
-  font: 700 13px var(--display); letter-spacing: 0.02em; color: var(--title);
-  background: linear-gradient(180deg, #7a1810 0%, #4e0d07 55%, #3a0904 100%);
-  border: 1px solid #000; border-radius: 3px; padding: 6px 14px; cursor: pointer;
-  text-shadow: 0 1px 0 #000;
-  box-shadow: inset 0 0 0 1px rgba(224, 189, 106, 0.55), inset 0 2px 0 rgba(255, 200, 150, 0.15), 0 1px 2px rgba(0, 0, 0, 0.6);
+.inset {
+  display: grid; grid-template-columns: 270px minmax(0, 1fr); margin-top: 10px; min-height: 640px;
+  background: linear-gradient(180deg, #151515, #0f0f0f);
+  border: 1px solid #000; border-radius: 3px;
+  box-shadow: inset 0 0 0 1px #2a2a2a, inset 0 3px 10px rgba(0, 0, 0, 0.8);
 }
-button:hover { filter: brightness(1.25); }
-button:active { background: linear-gradient(180deg, #3a0904, #5e120a); }
-.segmented button[aria-pressed="true"] {
+
+/* Sidebar ------------------------------------------------------------------ */
+.sidebar { padding: 18px 0 18px 4px; border-right: 1px solid #000; box-shadow: 1px 0 0 #2a2a2a; }
+.nav-group + .nav-group { margin-top: 30px; }
+.nav-head {
+  margin: 0 6px 6px 0; padding: 6px 18px;
+  font: 19px var(--display); color: #fff; text-shadow: 0 1px 0 #000;
+  background: linear-gradient(180deg, #282828, #141414);
+  border: 1px solid #000; border-radius: 3px; box-shadow: inset 0 1px 0 #3a3a3a;
+}
+.nav-items { display: flex; flex-direction: column; }
+.nav-item {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 16px 5px 42px;
+  font: 16px var(--display); color: var(--title); text-align: left; text-shadow: 0 1px 0 #000;
+  background: none; border: 0; cursor: pointer;
+}
+.nav-item:hover { color: #fff; }
+.nav-item[aria-current] {
   color: #fff;
-  background: linear-gradient(180deg, #b52a18 0%, #74150a 60%, #5a0f06 100%);
-  box-shadow: inset 0 0 0 1px var(--frame-hi), 0 0 10px rgba(255, 170, 0, 0.35);
+  background: linear-gradient(90deg, rgba(255, 209, 0, 0) 0%, rgba(255, 209, 0, 0.14) 18%,
+    rgba(255, 209, 0, 0.38) 62%, rgba(255, 209, 0, 0) 100%);
 }
-select {
-  font: 600 13px var(--display); color: var(--text-1);
-  background: linear-gradient(180deg, #1c1610, #0e0b08);
-  border: 1px solid var(--frame); border-radius: 3px; padding: 6px 10px; cursor: pointer;
-  box-shadow: inset 0 0 0 1px #000;
-}
-select option { background: var(--surface); color: var(--text-1); }
-button:focus-visible, select:focus-visible, svg:focus-visible, .bar-row:focus-visible {
-  outline: 2px solid var(--title); outline-offset: 2px;
-}
+.class-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px #000; }
 
-/* Frames -------------------------------------------------------------------- */
-.card {
-  position: relative; min-width: 0;
-  background: linear-gradient(180deg, var(--panel-top), var(--panel-bottom));
-  border: 1px solid var(--frame); border-radius: 4px;
-  padding: 18px; margin-bottom: 16px;
-  box-shadow:
-    0 0 0 1px #000,
-    inset 0 0 0 1px #000,
-    inset 0 0 0 2px rgba(224, 189, 106, 0.16),
-    inset 0 2px 0 2px rgba(255, 230, 160, 0.06),
-    0 8px 24px rgba(0, 0, 0, 0.55);
+/* Content ------------------------------------------------------------------- */
+.content { padding: 20px 28px 24px; min-width: 0; }
+.page-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  padding-bottom: 10px; margin-bottom: 18px;
+  border-bottom: 1px solid; border-image: linear-gradient(90deg, #5c5c5c, rgba(92, 92, 92, 0.15)) 1;
 }
-/* Gold studs in each corner. */
-.card::before {
-  content: ""; position: absolute; inset: 3px; pointer-events: none;
-  background:
-    var(--rivet) left top / 6px 6px no-repeat,
-    var(--rivet) right top / 6px 6px no-repeat,
-    var(--rivet) left bottom / 6px 6px no-repeat,
-    var(--rivet) right bottom / 6px 6px no-repeat;
-}
-.card h2 {
-  font: 700 15px var(--display); letter-spacing: 0.04em; margin: 0 0 4px; padding-bottom: 6px;
-  color: var(--title); text-shadow: 0 1px 0 #000;
-  border-bottom: 1px solid; border-image: linear-gradient(90deg, rgba(224, 189, 106, 0.6), rgba(224, 189, 106, 0)) 1;
-}
-.card .sub { color: var(--text-2); font-size: 13px; margin: 6px 0 12px; }
+.page-head h2 { margin: 0; font: 400 30px var(--display); color: #fff; text-shadow: 0 1px 0 #000; }
 
-/* Stats --------------------------------------------------------------------- */
-.hero-row { display: grid; grid-template-columns: minmax(280px, 1.5fr) repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
-.hero-row .card { margin: 0; }
-.stat-label { font: 700 12px var(--display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--title); }
-.stat-value { font: 700 22px var(--display); margin-top: 6px; white-space: nowrap; color: var(--text-1); text-shadow: 0 1px 0 #000; }
-.hero { border-color: var(--frame-hi); }
-.hero .stat-value {
-  font-size: clamp(26px, 2.5vw, 40px); line-height: 1.1;
-  color: var(--title); text-shadow: 0 2px 0 #000, 0 0 16px rgba(255, 190, 0, 0.25);
+/* Value boxes and arrow steppers, like the Options controls. */
+.stepper { display: flex; align-items: center; gap: 6px; }
+.arrow {
+  width: 30px; height: 30px; padding: 0; position: relative; cursor: pointer;
+  background: linear-gradient(180deg, #3a3a3a, #1c1c1c);
+  border: 1px solid #000; border-radius: 3px; box-shadow: inset 0 0 0 1px #5a5a5a;
 }
-.delta { font-size: 13px; margin-top: 6px; color: var(--text-2); }
-.delta .good { color: var(--up); font-weight: 600; }
-.delta .bad { color: var(--down); font-weight: 600; }
+.arrow::before {
+  content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  border: 7px solid transparent;
+}
+.arrow.prev::before { border-right: 9px solid var(--title); border-left-width: 0; }
+.arrow.next::before { border-left: 9px solid var(--title); border-right-width: 0; }
+.arrow:disabled { cursor: default; }
+.arrow:disabled::before { border-left-color: transparent; border-right-color: transparent; }
+.arrow.prev:disabled::before { border-right-color: #666; }
+.arrow.next:disabled::before { border-left-color: #666; }
+.arrow:not(:disabled):hover { filter: brightness(1.3); }
+.pill {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 220px; height: 32px;
+  padding: 0 14px; font: 15px var(--display); color: var(--title); text-shadow: 0 1px 0 #000;
+  white-space: nowrap; background: var(--metal);
+  border: 1px solid #000; border-radius: 4px;
+  box-shadow: inset 0 0 0 1px #5c5c5c, inset 0 2px 0 rgba(255, 255, 255, 0.07);
+}
+select.pill {
+  appearance: none; cursor: pointer; padding-right: 32px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8'%3E%3Cpath d='M0 0h10L5 8z' fill='%23ffd100'/%3E%3C/svg%3E") right 12px center no-repeat, var(--metal);
+}
+select.pill option { background: #1a1a1a; color: var(--text-1); }
+
+.btn-red {
+  padding: 5px 26px; cursor: pointer;
+  font: 15px var(--display); color: var(--title); text-shadow: 0 1px 0 #000;
+  background: linear-gradient(180deg, #a01212 0%, #6c0808 50%, #4a0404 100%);
+  border: 1px solid #000; border-radius: 4px;
+  box-shadow: inset 0 0 0 1px #c2402e, inset 0 2px 0 rgba(255, 160, 130, 0.18);
+}
+.btn-red:hover { filter: brightness(1.2); }
+.btn-red:active { filter: brightness(0.9); }
+
+/* Overview rows: yellow label, value box, note. */
+.rows { padding-left: 24px; margin-bottom: 22px; }
+.row {
+  display: grid; grid-template-columns: minmax(140px, 210px) minmax(220px, 300px) minmax(0, 1fr);
+  gap: 18px; align-items: center; padding: 6px 0;
+}
+.row-label { font: 16px var(--display); color: var(--title); text-shadow: 0 1px 0 #000; }
+.row .pill { justify-content: flex-end; color: #fff; font-size: 16px; min-width: 0; }
+.row .pill.hero { height: 40px; font-size: 22px; color: var(--title); }
+.row-note { color: var(--text-2); font-size: 13px; }
+.good { color: var(--up); font-weight: 600; }
+.bad { color: var(--down); font-weight: 600; }
 
 /* Money with coin icons. */
 .money { position: relative; white-space: nowrap; }  /* keeps the .sr label inside table scrollers */
@@ -142,46 +170,58 @@ button:focus-visible, select:focus-visible, svg:focus-visible, .bar-row:focus-vi
 .coin.s { background: radial-gradient(circle at 35% 30%, #ffffff, #c7c7cf 45%, #6f6f78); }
 .coin.c { background: radial-gradient(circle at 35% 30%, #ffd7b0, #d9894a 45%, #7a4318); }
 
-/* Charts -------------------------------------------------------------------- */
-.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
-.grid-2 .card { margin: 0; }
+/* Panels inside a page. */
+.panel {
+  min-width: 0; padding: 14px 16px; margin-bottom: 16px;
+  background: rgba(0, 0, 0, 0.28); border: 1px solid #000; border-radius: 3px;
+  box-shadow: inset 0 0 0 1px #262626;
+}
+.panel h3 { margin: 0; font: 400 17px var(--display); color: #fff; text-shadow: 0 1px 0 #000; }
+.panel .sub { color: var(--text-2); font-size: 13px; margin: 4px 0 12px; }
+.panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.panel-head .sub { margin-bottom: 0; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+
+/* Charts. */
 .legend { display: flex; gap: 16px; color: var(--text-2); font-size: 13px; margin-bottom: 8px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; box-shadow: 0 0 0 1px #000; }
 .chart { position: relative; width: 100%; }
 .chart svg { display: block; width: 100%; overflow: visible; }
 .chart text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
-.chart .end-label { fill: var(--title); font: 700 12px var(--display); }
+.chart .end-label { fill: var(--title); font: 12px var(--display); }
+.empty { color: var(--muted); padding: 24px 0; text-align: center; font-family: var(--display); }
 
 .bars { display: flex; flex-direction: column; gap: 2px; }
 .bar-row {
-  display: grid; grid-template-columns: minmax(96px, 34%) 1fr; align-items: center;
+  display: grid; grid-template-columns: minmax(96px, 36%) 1fr; align-items: center;
   gap: 8px; padding: 4px 6px; border-radius: 3px; cursor: default;
 }
-.bar-row:hover, .bar-row:focus-visible { background: var(--highlight); }
-.bar-label { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-row:hover, .bar-row:focus-visible { background: var(--row-hover); }
+.bar-label { font: 15px var(--display); color: var(--title); text-shadow: 0 1px 0 #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar-track { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .bar { height: 14px; border-radius: 0 4px 4px 0; flex: none; min-width: 2px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.6); }
 .bar-value { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-1); }
-.empty { color: var(--muted); padding: 24px 0; text-align: center; font-family: var(--display); }
 
-/* Tables -------------------------------------------------------------------- */
+/* Tables. */
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th {
-  text-align: left; font: 700 12px var(--display); letter-spacing: 0.04em; color: var(--title);
-  padding: 6px 8px; border-bottom: 1px solid var(--baseline); white-space: nowrap;
+  text-align: left; font: 14px var(--display); color: var(--title); text-shadow: 0 1px 0 #000;
+  padding: 6px 8px; border-bottom: 1px solid #3c3c3c; white-space: nowrap;
 }
-td { padding: 6px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+td { padding: 6px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); white-space: nowrap; }
 tbody tr:nth-child(even) td { background: rgba(255, 255, 255, 0.02); }
-tbody tr:hover td { background: var(--highlight); }
+tbody tr:hover td { background: var(--wash); }
 td.num, th.num { text-align: right; }
 td.ref { color: var(--text-2); max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 details { margin-top: 12px; }
-details summary { color: var(--title); cursor: pointer; font: 600 13px var(--display); }
+details summary { color: var(--title); cursor: pointer; font: 14px var(--display); }
 details .table-wrap { margin-top: 8px; max-height: 320px; overflow-y: auto; }
-.more { margin-top: 12px; }
-.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.more { margin-top: 14px; }
+
+.footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.footer .meta { color: var(--muted); font-size: 13px; }
 
 /* Tooltip, styled like the game's item tooltip. */
 #tip {
@@ -190,94 +230,125 @@ details .table-wrap { margin-top: 8px; max-height: 320px; overflow-y: auto; }
   border: 1px solid #6e6e8c; border-radius: 6px; padding: 8px 10px; font-size: 13px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 4px 16px rgba(0, 0, 0, 0.6);
 }
-#tip .tip-title { color: #fff; font: 700 14px var(--display); margin-bottom: 4px; }
+#tip .tip-title { color: #fff; font: 14px var(--display); margin-bottom: 4px; }
 #tip .tip-row { display: flex; align-items: center; gap: 8px; }
 #tip .tip-key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
 #tip .tip-value { color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; }
 #tip .tip-name { color: var(--title); }
 
-@media (max-width: 900px) {
-  .hero-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .hero-row .hero { grid-column: 1 / -1; }
-}
-@media (max-width: 640px) {
+@media (max-width: 860px) {
+  body { padding: 0; }
+  .window { border-radius: 0; }
+  .window-body { padding: 10px 12px 12px; }
+  .inset { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .sidebar { padding: 12px; border-right: 0; box-shadow: none; border-bottom: 1px solid #000; }
+  .nav-group + .nav-group { margin-top: 12px; }
+  .nav-head { margin-right: 0; font-size: 16px; padding: 4px 12px; }
+  .nav-items { flex-direction: row; flex-wrap: wrap; }
+  .nav-item { width: auto; padding: 5px 12px; font-size: 15px; }
+  .content { padding: 16px 12px 18px; }
+  .page-head h2 { font-size: 24px; }
+  .pill { min-width: 150px; }
+  .rows { padding-left: 0; }
+  .row { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 8px 0; }
   .grid-2 { grid-template-columns: minmax(0, 1fr); }
-  .stat-value { font-size: 19px; }
-  header .meta { margin-left: 0; width: 100%; }
 }
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <h1>Mariposa</h1>
-    <span class="tagline">Gold Ledger</span>
-    <span class="meta" id="meta"></span>
-  </header>
+<div class="window">
+  <div class="titlebar">Mariposa</div>
+  <div class="window-body">
+    <div class="topbar">
+      <input type="search" class="search" id="search" placeholder="Search ledger" aria-label="Search ledger">
+    </div>
+    <div class="inset">
+      <nav class="sidebar" aria-label="Dashboard">
+        <div class="nav-group">
+          <div class="nav-head">Reports</div>
+          <div class="nav-items" id="page-nav"></div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-head">Characters</div>
+          <div class="nav-items" id="pocket-nav"></div>
+        </div>
+      </nav>
 
-  <div class="filters">
-    <div class="segmented" role="group" aria-label="Date range" id="range"></div>
-    <select id="pocket" aria-label="Character"></select>
+      <main class="content">
+        <div class="page-head">
+          <h2 id="page-title">Overview</h2>
+          <div class="stepper" role="group" aria-label="Date range">
+            <button type="button" class="arrow prev" id="range-prev" aria-label="Shorter range"></button>
+            <span class="pill" id="range-label" aria-live="polite"></span>
+            <button type="button" class="arrow next" id="range-next" aria-label="Longer range"></button>
+          </div>
+        </div>
+
+        <section class="page" data-page="overview">
+          <div class="rows">
+            <div class="row"><span class="row-label" id="worth-label">Net worth</span><span class="pill hero" id="worth"></span><span class="row-note" id="worth-delta"></span></div>
+            <div class="row"><span class="row-label">Income</span><span class="pill" id="kpi-income"></span><span class="row-note" id="kpi-income-delta"></span></div>
+            <div class="row"><span class="row-label">Expenses</span><span class="pill" id="kpi-expense"></span><span class="row-note" id="kpi-expense-delta"></span></div>
+            <div class="row"><span class="row-label">Net</span><span class="pill" id="kpi-net"></span><span class="row-note" id="kpi-net-delta"></span></div>
+            <div class="row"><span class="row-label">Per day</span><span class="pill" id="kpi-day"></span><span class="row-note" id="kpi-day-delta"></span></div>
+          </div>
+          <div class="panel">
+            <h3 id="worth-title">Net worth over time</h3>
+            <p class="sub" id="worth-sub"></p>
+            <div class="chart" id="worth-chart"></div>
+            <details><summary>Show as table</summary><div class="table-wrap" id="worth-table"></div></details>
+          </div>
+          <div class="panel">
+            <h3>Daily income and expenses</h3>
+            <p class="sub">Transfers aren't counted.</p>
+            <div class="legend">
+              <span><i class="swatch" style="background: var(--income)"></i>Income</span>
+              <span><i class="swatch" style="background: var(--expense)"></i>Expenses</span>
+            </div>
+            <div class="chart" id="daily-chart"></div>
+            <details><summary>Show as table</summary><div class="table-wrap" id="daily-table"></div></details>
+          </div>
+        </section>
+
+        <section class="page grid-2" data-page="breakdown" hidden>
+          <div class="panel">
+            <h3>Income by source</h3>
+            <p class="sub" id="income-sub"></p>
+            <div class="bars" id="income-bars"></div>
+          </div>
+          <div class="panel">
+            <h3>Expenses by category</h3>
+            <p class="sub" id="expense-sub"></p>
+            <div class="bars" id="expense-bars"></div>
+          </div>
+        </section>
+
+        <section class="page" data-page="characters" hidden>
+          <div class="panel">
+            <h3>Balances and flows</h3>
+            <p class="sub">Balances are current; flows are for the selected range.</p>
+            <div class="table-wrap" id="pockets-table"></div>
+          </div>
+        </section>
+
+        <section class="page" data-page="ledger" hidden>
+          <div class="panel">
+            <div class="panel-head">
+              <div><h3>Transactions</h3><p class="sub" id="ledger-sub"></p></div>
+              <select class="pill" id="ledger-cat" aria-label="Ledger category"></select>
+            </div>
+            <div class="table-wrap" id="ledger-table"></div>
+            <button type="button" class="btn-red more" id="ledger-more" hidden>Show more</button>
+          </div>
+        </section>
+      </main>
+    </div>
+    <div class="footer">
+      <span class="meta" id="meta"></span>
+      <button type="button" class="btn-red" id="export">Export CSV</button>
+    </div>
   </div>
-
-  <section class="hero-row">
-    <div class="card hero">
-      <div class="stat-label" id="worth-label">Net worth</div>
-      <div class="stat-value" id="worth"></div>
-      <div class="delta" id="worth-delta"></div>
-    </div>
-    <div class="card"><div class="stat-label">Income</div><div class="stat-value" id="kpi-income"></div><div class="delta" id="kpi-income-delta"></div></div>
-    <div class="card"><div class="stat-label">Expenses</div><div class="stat-value" id="kpi-expense"></div><div class="delta" id="kpi-expense-delta"></div></div>
-    <div class="card"><div class="stat-label">Net</div><div class="stat-value" id="kpi-net"></div><div class="delta" id="kpi-net-delta"></div></div>
-    <div class="card"><div class="stat-label">Per day</div><div class="stat-value" id="kpi-day"></div><div class="delta" id="kpi-day-delta"></div></div>
-  </section>
-
-  <section class="card">
-    <h2 id="worth-title">Net worth over time</h2>
-    <p class="sub" id="worth-sub"></p>
-    <div class="chart" id="worth-chart"></div>
-    <details><summary>Show as table</summary><div class="table-wrap" id="worth-table"></div></details>
-  </section>
-
-  <section class="card">
-    <h2>Daily income and expenses</h2>
-    <p class="sub">Transfers aren't counted.</p>
-    <div class="legend">
-      <span><i class="swatch" style="background: var(--income)"></i>Income</span>
-      <span><i class="swatch" style="background: var(--expense)"></i>Expenses</span>
-    </div>
-    <div class="chart" id="daily-chart"></div>
-    <details><summary>Show as table</summary><div class="table-wrap" id="daily-table"></div></details>
-  </section>
-
-  <section class="grid-2">
-    <div class="card">
-      <h2>Income by source</h2>
-      <p class="sub" id="income-sub"></p>
-      <div class="bars" id="income-bars"></div>
-    </div>
-    <div class="card">
-      <h2>Expenses by category</h2>
-      <p class="sub" id="expense-sub"></p>
-      <div class="bars" id="expense-bars"></div>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>Characters</h2>
-    <p class="sub">Balances are current; flows are for the selected range.</p>
-    <div class="table-wrap" id="pockets-table"></div>
-  </section>
-
-  <section class="card">
-    <div class="card-head">
-      <div><h2>Ledger</h2><p class="sub" id="ledger-sub"></p></div>
-      <select id="ledger-cat" aria-label="Ledger category"></select>
-    </div>
-    <div class="table-wrap" id="ledger-table"></div>
-    <button type="button" class="more" id="ledger-more" hidden>Show more</button>
-  </section>
-</main>
+</div>
 <div id="tip" role="status" hidden></div>
 
 <script type="application/json" id="mariposa-data">/*__MARIPOSA_DATA__*/null</script>
@@ -324,7 +395,7 @@ const CLASS_COLORS = {
 };
 function nameNode(p) {
   const span = el("span", {}, p.name);
-  span.style.color = p.kind === "warband" ? "#e6cc80" : CLASS_COLORS[p.cls] || "";
+  span.style.color = classColor(p);
   return span;
 }
 
@@ -359,18 +430,19 @@ function addDays(dayTs, n) {
 // ---------------------------------------------------------------------------
 // State
 
-const state = { range: 30, pocket: "all", ledgerCat: "all", ledgerShown: LEDGER_PAGE };
+const state = { range: 30, pocket: "all", page: "overview", ledgerCat: "all", query: "", ledgerShown: LEDGER_PAGE };
 function loadPrefs() {
   try {
     const saved = JSON.parse(localStorage.getItem("mariposa.filters") || "{}");
     if (RANGES.some(([v]) => v === saved.range)) state.range = saved.range;
     if (saved.pocket === "all" || D.pockets.some(p => p.key === saved.pocket)) state.pocket = saved.pocket;
+    if (["overview", "breakdown", "characters", "ledger"].includes(saved.page)) state.page = saved.page;
   } catch (_) { /* storage unavailable */ }
 }
 function savePrefs() {
   try {
     localStorage.setItem("mariposa.filters", JSON.stringify({
-      range: state.range, pocket: state.pocket,
+      range: state.range, pocket: state.pocket, page: state.page,
     }));
   } catch (_) { /* storage unavailable */ }
 }
@@ -717,35 +789,82 @@ function setDelta(node, curValue, prevValue, upIsGood) {
 // ---------------------------------------------------------------------------
 // Render
 
+const PAGES = [
+  ["overview", "Overview"], ["breakdown", "Income & Expenses"],
+  ["characters", "Characters"], ["ledger", "Ledger"],
+];
 let model;
 
-function renderControls() {
-  const range = document.getElementById("range");
-  range.replaceChildren();
-  for (const [value, text] of RANGES) {
-    const b = range.appendChild(el("button", { type: "button", "aria-pressed": String(state.range === value) }, text));
-    b.addEventListener("click", () => { state.range = value; state.ledgerShown = LEDGER_PAGE; update(); });
-  }
-  const select = document.getElementById("pocket");
-  if (!select.options.length) {
-    select.appendChild(el("option", { value: "all" }, "All characters"));
-    for (const p of D.pockets) {
-      select.appendChild(el("option", { value: p.key }, p.realm ? `${p.name} – ${p.realm}` : p.name));
+function classColor(p) {
+  return p.kind === "warband" ? "#e6cc80" : CLASS_COLORS[p.cls] || "";
+}
+
+// Sidebar entries are built once; selection only moves aria-current, so
+// keyboard focus survives a click.
+function buildNav() {
+  const item = (text, key, onClick, color) => {
+    const b = el("button", { type: "button", class: "nav-item", "data-key": key });
+    if (color) b.appendChild(el("i", { class: "class-dot", "aria-hidden": "true" })).style.background = color;
+    b.append(text);
+    b.addEventListener("click", onClick);
+    return b;
+  };
+  document.getElementById("page-nav").replaceChildren(
+    ...PAGES.map(([id, text]) => item(text, id, () => showPage(id))));
+  document.getElementById("pocket-nav").replaceChildren(
+    item("All characters", "all", () => setPocket("all")),
+    ...D.pockets.map(p => item(p.name, p.key, () => setPocket(p.key), classColor(p))));
+}
+
+function renderNav() {
+  const mark = (id, current) => {
+    for (const b of document.getElementById(id).children) {
+      if (b.dataset.key === current) b.setAttribute("aria-current", "true");
+      else b.removeAttribute("aria-current");
     }
-    select.addEventListener("change", () => { state.pocket = select.value; state.ledgerShown = LEDGER_PAGE; update(); });
-  }
-  select.value = state.pocket;
+  };
+  mark("page-nav", state.page);
+  mark("pocket-nav", state.pocket);
+  const i = RANGES.findIndex(([v]) => v === state.range);
+  document.getElementById("range-label").textContent = RANGES[i][1];
+  document.getElementById("range-prev").disabled = i === 0;
+  document.getElementById("range-next").disabled = i === RANGES.length - 1;
+}
+
+function showPage(id) {
+  state.page = id;
+  savePrefs();
+  for (const page of document.querySelectorAll(".page")) page.hidden = page.dataset.page !== id;
+  document.getElementById("page-title").textContent = PAGES.find(([p]) => p === id)[1];
+  renderNav();
+  // Charts measure their container, so draw them once they're visible.
+  if (id === "overview" && model) renderCharts();
+}
+
+function setPocket(key) {
+  state.pocket = key;
+  state.ledgerShown = LEDGER_PAGE;
+  update();
+}
+
+function stepRange(dir) {
+  const i = RANGES.findIndex(([v]) => v === state.range) + dir;
+  if (i < 0 || i >= RANGES.length) return;
+  state.range = RANGES[i][0];
+  state.ledgerShown = LEDGER_PAGE;
+  update();
 }
 
 function renderCharts() {
+  if (state.page !== "overview") return;
   renderWorth(document.getElementById("worth-chart"), model.days, model.worth);
   renderDaily(document.getElementById("daily-chart"), model.daily);
 }
 
 function update() {
   savePrefs();
-  renderControls();
   model = compute();
+  renderNav();
   const { cur, prev } = model;
   const ndays = model.days.length;
 
@@ -757,8 +876,7 @@ function update() {
     : "Balance at the end of each day. Transfers between your own characters don't change the total.";
   document.getElementById("worth").replaceChildren(money(model.current));
   const change = model.current - model.startBalance;
-  const wd = document.getElementById("worth-delta");
-  wd.replaceChildren(
+  document.getElementById("worth-delta").replaceChildren(
     el("span", change === 0 ? {} : { class: change > 0 ? "good" : "bad" },
       `${change > 0 ? "▲" : change < 0 ? "▼" : "→"} ${gold(change, true)}`),
     state.range === "all" ? " all time" : ` over ${state.range} days`);
@@ -773,7 +891,7 @@ function update() {
   document.getElementById("kpi-day-delta").textContent = `average over ${ndays} day${ndays === 1 ? "" : "s"}`;
 
   renderCharts();
-  table(document.getElementById("worth-table"), [["Date"], ["Net worth", true]],
+  table(document.getElementById("worth-table"), [["Date"], [single ? "Balance" : "Net worth", true]],
     model.days.map((d, i) => [fmtDay(d), money(model.worth[i])]).reverse());
   table(document.getElementById("daily-table"), [["Date"], ["Income", true], ["Expenses", true], ["Net", true]],
     model.daily.map(d => [fmtDay(d.day), money(d.inc, true), money(d.exp, true), money(d.inc + d.exp, true)]).reverse());
@@ -794,7 +912,16 @@ function update() {
   renderLedger();
 }
 
-// The ledger re-renders on its own, so paging doesn't recompute everything.
+// Ledger rows after the category filter and search box.
+function ledgerRows() {
+  const q = state.query;
+  return model.ledger.filter(([pi, , , cat, ref]) =>
+    (state.ledgerCat === "all" || cat === state.ledgerCat) &&
+    (!q || D.pockets[pi].name.toLowerCase().includes(q) || label(cat).toLowerCase().includes(q) ||
+      (ref != null && String(ref).toLowerCase().includes(q))));
+}
+
+// The ledger re-renders on its own, so paging and search don't recompute everything.
 function renderLedger() {
   const catSelect = document.getElementById("ledger-cat");
   const cats = [...new Set(model.ledger.map(t => t[3]))].sort((a, b) => label(a).localeCompare(label(b)));
@@ -802,10 +929,10 @@ function renderLedger() {
   catSelect.replaceChildren(el("option", { value: "all" }, "All categories"),
     ...cats.map(c => el("option", { value: c }, label(c))));
   catSelect.value = state.ledgerCat;
-  const rows = state.ledgerCat === "all" ? model.ledger : model.ledger.filter(t => t[3] === state.ledgerCat);
+  const rows = ledgerRows();
   const shown = rows.slice(0, state.ledgerShown);
   document.getElementById("ledger-sub").textContent =
-    `${nf.format(rows.length)} transactions in range, newest first`;
+    `${nf.format(rows.length)} transactions${state.query ? ` matching “${state.query}”` : ""}, newest first`;
   table(document.getElementById("ledger-table"),
     [["Time"], ["Character"], ["Category"], ["Amount", true], ["Detail", false, "ref"]],
     shown.map(([pi, ts, amount, cat, ref]) => [timeFmt.format(new Date(ts * 1000)), nameNode(D.pockets[pi]),
@@ -813,29 +940,59 @@ function renderLedger() {
   document.getElementById("ledger-more").hidden = shown.length >= rows.length;
 }
 
+function exportCsv() {
+  // Prefix text that a spreadsheet would read as a formula.
+  const text = v => {
+    const s = v == null ? "" : String(v);
+    const safe = /^[=+\-@]/.test(s) ? "'" + s : s;
+    return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+  };
+  const lines = [["time", "character", "realm", "category", "copper", "detail"].join(",")];
+  for (const [pi, ts, amount, cat, ref] of ledgerRows()) {
+    const p = D.pockets[pi];
+    lines.push([new Date(ts * 1000).toISOString(), text(p.name), text(p.realm), text(label(cat)), amount, text(ref)].join(","));
+  }
+  const url = URL.createObjectURL(new Blob([lines.join("\n") + "\n"], { type: "text/csv" }));
+  const a = el("a", { href: url, download: "mariposa-ledger.csv" });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 document.getElementById("ledger-cat").addEventListener("change", e => {
   state.ledgerCat = e.target.value;
   state.ledgerShown = LEDGER_PAGE;
   renderLedger();
 });
-
 document.getElementById("ledger-more").addEventListener("click", () => {
   state.ledgerShown += LEDGER_PAGE;
   renderLedger();
 });
+document.getElementById("search").addEventListener("input", e => {
+  state.query = e.target.value.trim().toLowerCase();
+  state.ledgerShown = LEDGER_PAGE;
+  if (state.query && state.page !== "ledger") showPage("ledger");
+  renderLedger();
+});
+document.getElementById("range-prev").addEventListener("click", () => stepRange(-1));
+document.getElementById("range-next").addEventListener("click", () => stepRange(1));
+document.getElementById("export").addEventListener("click", exportCsv);
 
 const pocketCount = D.pockets.filter(p => p.kind === "character").length;
 document.getElementById("meta").textContent =
   `${pocketCount} character${pocketCount === 1 ? "" : "s"} · updated ${timeFmt.format(new Date(D.generatedAt * 1000))}`;
 
 loadPrefs();
+buildNav();
 update();
+showPage(state.page);
 // Redraw charts only when their width changes, not when the page grows.
 const chartHost = document.getElementById("worth-chart");
 let resizeTimer, lastWidth = chartHost.clientWidth;
 new ResizeObserver(entries => {
   const width = Math.round(entries[0].contentRect.width);
-  if (width === lastWidth) return;
+  if (width === lastWidth || width === 0) return;
   lastWidth = width;
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => model && renderCharts(), 100);

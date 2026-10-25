@@ -21,8 +21,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Dashboard: styled after the WoW interface, with bronze-framed panels, red panel buttons,
-  gold titles, coin icons, class-colored character names, and a game-style tooltip. It's
-  dark only, like the game, so the light/dark toggle is gone.
+- Dashboard: laid out like the game's Options window. Reports and characters are in a
+  sidebar, the date range is an arrow stepper, totals are shown as Options-style rows, and
+  buttons are red. Amounts show coin icons, characters show in their class colors, and the
+  tooltip is styled like the game's. It's dark only, like the game, so the light/dark
+  toggle is gone.
+- Dashboard: a search box filters the ledger, and Export CSV downloads the filtered ledger.
 
 ### Fixed
