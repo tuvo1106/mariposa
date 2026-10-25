@@ -5,238 +5,353 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mariposa Gold Ledger</title>
 <style>
+/* Styled after the game's Options window: charcoal frame, category sidebar,
+   yellow labels, gray value boxes, red buttons. Dark only, like the game. */
 :root {
-  color-scheme: light;
-  --page: #f9f9f7;
-  --surface: #fcfcfb;
-  --text-1: #0b0b0b;
-  --text-2: #52514e;
-  --muted: #898781;
-  --grid: #e1e0d9;
-  --baseline: #c3c2b7;
-  --border: rgba(11, 11, 11, 0.10);
-  --wash: rgba(11, 11, 11, 0.04);
-  --income: #2a78d6;
-  --expense: #e34948;
-  --worth: #2a78d6;
-  --up: #006300;
-  --down: #d03b3b;
-  --brand: #eb6834;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --page: #0d0d0d;
-    --surface: #1a1a19;
-    --text-1: #f0efec;
-    --text-2: #c3c2b7;
-    --muted: #898781;
-    --grid: #2c2c2a;
-    --baseline: #383835;
-    --border: rgba(255, 255, 255, 0.10);
-    --wash: rgba(255, 255, 255, 0.05);
-    --income: #3987e5;
-    --expense: #e66767;
-    --worth: #3987e5;
-    --up: #0ca30c;
-    --down: #e66767;
-    --brand: #d95926;
-  }
-}
-:root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #0d0d0d;
-  --surface: #1a1a19;
-  --text-1: #f0efec;
-  --text-2: #c3c2b7;
-  --muted: #898781;
-  --grid: #2c2c2a;
-  --baseline: #383835;
-  --border: rgba(255, 255, 255, 0.10);
-  --wash: rgba(255, 255, 255, 0.05);
-  --income: #3987e5;
-  --expense: #e66767;
-  --worth: #3987e5;
-  --up: #0ca30c;
-  --down: #e66767;
-  --brand: #d95926;
+  --surface: #141414;          /* behind chart marks: ring and gap color */
+  --text-1: #f5f5f5;
+  --text-2: #b3b3b3;
+  --muted: #858585;
+  --title: #ffd100;            /* the game's yellow label color */
+  --grid: rgba(255, 255, 255, 0.07);
+  --baseline: rgba(255, 255, 255, 0.24);
+  --wash: rgba(255, 209, 0, 0.08);
+  --row-hover: rgba(255, 255, 255, 0.05);
+  --income: #0070dd;           /* "rare" item blue */
+  --expense: #e03c3c;
+  --worth: #f0c040;
+  --up: #1eff00;               /* "uncommon" item green */
+  --down: #ff3b30;
+  --display: "Friz Quadrata TT", "Friz Quadrata", Cinzel, "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --body: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --metal: linear-gradient(180deg, #3b3b3b 0%, #262626 50%, #1d1d1d 100%);
 }
 
 * { box-sizing: border-box; }
 body {
-  margin: 0;
-  background: var(--page);
-  color: var(--text-1);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  margin: 0; min-height: 100vh; padding: 24px 16px;
+  color: var(--text-1); font: 14px/1.45 var(--body);
+  background:
+    radial-gradient(ellipse at 12% 18%, rgba(255, 110, 30, 0.13), transparent 40%),
+    radial-gradient(ellipse at 88% 8%, rgba(150, 95, 50, 0.14), transparent 45%),
+    radial-gradient(ellipse at 50% 120%, rgba(255, 90, 20, 0.08), transparent 50%),
+    #0c0b0a;
 }
-main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 48px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+button, select, input { font: inherit; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--title); outline-offset: 2px; }
 
-header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-header h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 8px; }
-header h1::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
-header .meta { color: var(--text-2); font-size: 13px; }
-header button { margin-left: auto; }
-
-.filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
-.segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
-.segmented button { border: 0; border-radius: 0; border-right: 1px solid var(--border); }
-.segmented button:last-child { border-right: 0; }
-.segmented button[aria-pressed="true"] { background: var(--wash); color: var(--text-1); font-weight: 600; }
-button, select {
-  font: inherit; color: var(--text-2); background: var(--surface);
-  border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer;
+/* Window ------------------------------------------------------------------- */
+.window {
+  max-width: 1200px; margin: 0 auto; padding: 3px;
+  background: linear-gradient(180deg, #1f1f1f, #161616);
+  border: 1px solid #000; border-radius: 6px;
+  box-shadow: inset 0 0 0 1px #4b4b4b, inset 0 0 0 2px #121212, inset 0 0 0 3px #2f2f2f,
+    0 14px 44px rgba(0, 0, 0, 0.75);
 }
-button:hover, select:hover { color: var(--text-1); }
-button:focus-visible, select:focus-visible, svg:focus-visible, .bar-row:focus-visible {
-  outline: 2px solid var(--worth); outline-offset: 2px;
+.titlebar {
+  height: 48px; display: flex; align-items: center; justify-content: center;
+  font: 28px var(--display); letter-spacing: 0.04em; color: var(--title);
+  text-shadow: 0 2px 0 #000, 0 0 14px rgba(255, 190, 0, 0.3);
+  background: linear-gradient(180deg, #2d2d2d, #121212);
+  border-bottom: 1px solid #000; box-shadow: 0 1px 0 #333; border-radius: 4px 4px 0 0;
+}
+.window-body { padding: 12px 16px 14px; }
+.topbar { display: flex; justify-content: flex-end; }
+.search {
+  width: min(500px, 100%); height: 26px; padding: 0 10px 0 30px;
+  color: var(--text-1); background: #0b0b0b url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%23999' stroke-width='2'%3E%3Ccircle cx='6' cy='6' r='4.5'/%3E%3Cpath d='M9.5 9.5 13 13'/%3E%3C/svg%3E") 9px center no-repeat;
+  border: 1px solid #5a5a5a; border-radius: 3px; box-shadow: inset 0 1px 3px #000;
+}
+.search::placeholder { color: var(--muted); }
+
+.inset {
+  display: grid; grid-template-columns: 270px minmax(0, 1fr); margin-top: 10px; min-height: 640px;
+  background: linear-gradient(180deg, #151515, #0f0f0f);
+  border: 1px solid #000; border-radius: 3px;
+  box-shadow: inset 0 0 0 1px #2a2a2a, inset 0 3px 10px rgba(0, 0, 0, 0.8);
 }
 
-.card {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-  padding: 16px; margin-bottom: 16px; min-width: 0;
+/* Sidebar ------------------------------------------------------------------ */
+.sidebar { padding: 18px 0 18px 4px; border-right: 1px solid #000; box-shadow: 1px 0 0 #2a2a2a; }
+.nav-group + .nav-group { margin-top: 30px; }
+.nav-head {
+  margin: 0 6px 6px 0; padding: 6px 18px;
+  font: 19px var(--display); color: #fff; text-shadow: 0 1px 0 #000;
+  background: linear-gradient(180deg, #282828, #141414);
+  border: 1px solid #000; border-radius: 3px; box-shadow: inset 0 1px 0 #3a3a3a;
 }
-.card h2 { font-size: 14px; font-weight: 600; margin: 0 0 2px; }
-.card .sub { color: var(--text-2); font-size: 13px; margin: 0 0 12px; }
+.nav-items { display: flex; flex-direction: column; }
+.nav-item {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 16px 5px 42px;
+  font: 16px var(--display); color: var(--title); text-align: left; text-shadow: 0 1px 0 #000;
+  background: none; border: 0; cursor: pointer;
+}
+.nav-item:hover { color: #fff; }
+.nav-item[aria-current] {
+  color: #fff;
+  background: linear-gradient(90deg, rgba(255, 209, 0, 0) 0%, rgba(255, 209, 0, 0.14) 18%,
+    rgba(255, 209, 0, 0.38) 62%, rgba(255, 209, 0, 0) 100%);
+}
+.class-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px #000; }
 
-.hero-row { display: grid; grid-template-columns: minmax(280px, 1.5fr) repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
-.hero-row .card { margin: 0; }
-.stat-label { color: var(--text-2); font-size: 13px; }
-.stat-value { font-size: 24px; font-weight: 600; margin-top: 4px; white-space: nowrap; }
-.hero .stat-value { font-size: clamp(28px, 2.6vw, 44px); line-height: 1.1; }
-.delta { font-size: 13px; margin-top: 4px; color: var(--text-2); }
-.delta .good { color: var(--up); font-weight: 600; }
-.delta .bad { color: var(--down); font-weight: 600; }
+/* Content ------------------------------------------------------------------- */
+.content { padding: 20px 28px 24px; min-width: 0; }
+.page-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  padding-bottom: 10px; margin-bottom: 18px;
+  border-bottom: 1px solid; border-image: linear-gradient(90deg, #5c5c5c, rgba(92, 92, 92, 0.15)) 1;
+}
+.page-head h2 { margin: 0; font: 400 30px var(--display); color: #fff; text-shadow: 0 1px 0 #000; }
 
+/* Value boxes and arrow steppers, like the Options controls. */
+.stepper { display: flex; align-items: center; gap: 6px; }
+.arrow {
+  width: 30px; height: 30px; padding: 0; position: relative; cursor: pointer;
+  background: linear-gradient(180deg, #3a3a3a, #1c1c1c);
+  border: 1px solid #000; border-radius: 3px; box-shadow: inset 0 0 0 1px #5a5a5a;
+}
+.arrow::before {
+  content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  border: 7px solid transparent;
+}
+.arrow.prev::before { border-right: 9px solid var(--title); border-left-width: 0; }
+.arrow.next::before { border-left: 9px solid var(--title); border-right-width: 0; }
+.arrow:disabled { cursor: default; }
+.arrow:disabled::before { border-left-color: transparent; border-right-color: transparent; }
+.arrow.prev:disabled::before { border-right-color: #666; }
+.arrow.next:disabled::before { border-left-color: #666; }
+.arrow:not(:disabled):hover { filter: brightness(1.3); }
+.pill {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 220px; height: 32px;
+  padding: 0 14px; font: 15px var(--display); color: var(--title); text-shadow: 0 1px 0 #000;
+  white-space: nowrap; background: var(--metal);
+  border: 1px solid #000; border-radius: 4px;
+  box-shadow: inset 0 0 0 1px #5c5c5c, inset 0 2px 0 rgba(255, 255, 255, 0.07);
+}
+select.pill {
+  appearance: none; cursor: pointer; padding-right: 32px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8'%3E%3Cpath d='M0 0h10L5 8z' fill='%23ffd100'/%3E%3C/svg%3E") right 12px center no-repeat, var(--metal);
+}
+select.pill option { background: #1a1a1a; color: var(--text-1); }
+#range-select { text-align: center; text-align-last: center; padding-left: 32px; }
+
+.btn-red {
+  padding: 5px 26px; cursor: pointer;
+  font: 15px var(--display); color: var(--title); text-shadow: 0 1px 0 #000;
+  background: linear-gradient(180deg, #a01212 0%, #6c0808 50%, #4a0404 100%);
+  border: 1px solid #000; border-radius: 4px;
+  box-shadow: inset 0 0 0 1px #c2402e, inset 0 2px 0 rgba(255, 160, 130, 0.18);
+}
+.btn-red:hover { filter: brightness(1.2); }
+.btn-red:active { filter: brightness(0.9); }
+
+/* Overview rows: yellow label, value box, note. */
+.rows { padding-left: 24px; margin-bottom: 22px; }
+.row {
+  display: grid; grid-template-columns: minmax(140px, 210px) minmax(220px, 300px) minmax(0, 1fr);
+  gap: 18px; align-items: center; padding: 6px 0;
+}
+.row-label { font: 16px var(--display); color: var(--title); text-shadow: 0 1px 0 #000; }
+.row .pill { justify-content: flex-end; color: #fff; font-size: 16px; min-width: 0; }
+.row .pill.hero { height: 40px; font-size: 22px; color: var(--title); }
+.row-note { color: var(--text-2); font-size: 13px; }
+.good { color: var(--up); font-weight: 600; }
+.bad { color: var(--down); font-weight: 600; }
+
+/* Money with coin icons. */
+.money { position: relative; white-space: nowrap; }  /* keeps the .sr label inside table scrollers */
+.coin {
+  display: inline-block; width: 0.72em; height: 0.72em; border-radius: 50%;
+  margin-left: 0.2em; vertical-align: -0.02em;
+  box-shadow: inset 0 -1px 1px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 0, 0, 0.7);
+}
+.coin.g { background: radial-gradient(circle at 35% 30%, #fff6b0, #f2c230 45%, #a87a12); }
+.coin.s { background: radial-gradient(circle at 35% 30%, #ffffff, #c7c7cf 45%, #6f6f78); }
+.coin.c { background: radial-gradient(circle at 35% 30%, #ffd7b0, #d9894a 45%, #7a4318); }
+
+/* Panels inside a page. */
+.panel {
+  min-width: 0; padding: 14px 16px; margin-bottom: 16px;
+  background: rgba(0, 0, 0, 0.28); border: 1px solid #000; border-radius: 3px;
+  box-shadow: inset 0 0 0 1px #262626;
+}
+.panel h3 { margin: 0; font: 400 17px var(--display); color: #fff; text-shadow: 0 1px 0 #000; }
+.panel .sub { color: var(--text-2); font-size: 13px; margin: 4px 0 12px; }
+.panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.panel-head .sub { margin-bottom: 0; }
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.grid-2 .card { margin: 0; }
-.grid-2 { margin-bottom: 16px; }
 
+/* Charts. */
 .legend { display: flex; gap: 16px; color: var(--text-2); font-size: 13px; margin-bottom: 8px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
-.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
-
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; box-shadow: 0 0 0 1px #000; }
 .chart { position: relative; width: 100%; }
 .chart svg { display: block; width: 100%; overflow: visible; }
 .chart text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
-.chart .end-label { fill: var(--text-1); font-size: 12px; font-weight: 600; }
+.chart .end-label { fill: var(--title); font: 12px var(--display); }
+.empty { color: var(--muted); padding: 24px 0; text-align: center; font-family: var(--display); }
 
 .bars { display: flex; flex-direction: column; gap: 2px; }
 .bar-row {
-  display: grid; grid-template-columns: minmax(96px, 34%) 1fr; align-items: center;
-  gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: default;
+  display: grid; grid-template-columns: minmax(96px, 36%) 1fr; align-items: center;
+  gap: 8px; padding: 4px 6px; border-radius: 3px; cursor: default;
 }
-.bar-row:hover, .bar-row:focus-visible { background: var(--wash); }
-.bar-label { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-row:hover, .bar-row:focus-visible { background: var(--row-hover); }
+.bar-label { font: 15px var(--display); color: var(--title); text-shadow: 0 1px 0 #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar-track { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.bar { height: 16px; border-radius: 0 4px 4px 0; flex: none; min-width: 2px; }
+.bar { height: 14px; border-radius: 0 4px 4px 0; flex: none; min-width: 2px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.6); }
 .bar-value { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-1); }
-.empty { color: var(--muted); padding: 24px 0; text-align: center; }
 
+/* Tables. */
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-th { text-align: left; font-weight: 600; color: var(--text-2); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
-td { padding: 6px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th {
+  text-align: left; font: 14px var(--display); color: var(--title); text-shadow: 0 1px 0 #000;
+  padding: 6px 8px; border-bottom: 1px solid #3c3c3c; white-space: nowrap;
+}
+td { padding: 6px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); white-space: nowrap; }
+tbody tr:nth-child(even) td { background: rgba(255, 255, 255, 0.02); }
+tbody tr:hover td { background: var(--wash); }
 td.num, th.num { text-align: right; }
 td.ref { color: var(--text-2); max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
-tr.warband td:first-child { font-style: italic; }
 details { margin-top: 12px; }
-details summary { color: var(--text-2); cursor: pointer; font-size: 13px; }
+details summary { color: var(--title); cursor: pointer; font: 14px var(--display); }
 details .table-wrap { margin-top: 8px; max-height: 320px; overflow-y: auto; }
-.more { margin-top: 12px; }
-.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.more { margin-top: 14px; }
 
+.footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.footer .meta { color: var(--muted); font-size: 13px; }
+
+/* Tooltip, styled like the game's item tooltip. */
 #tip {
-  position: fixed; z-index: 10; pointer-events: none; min-width: 140px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-  padding: 8px 10px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); font-size: 13px;
+  position: fixed; z-index: 10; pointer-events: none; min-width: 150px;
+  background: linear-gradient(180deg, rgba(14, 14, 32, 0.96), rgba(6, 6, 16, 0.96));
+  border: 1px solid #6e6e8c; border-radius: 6px; padding: 8px 10px; font-size: 13px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 4px 16px rgba(0, 0, 0, 0.6);
 }
-#tip .tip-title { color: var(--text-2); margin-bottom: 4px; }
+#tip .tip-title { color: #fff; font: 14px var(--display); margin-bottom: 4px; }
 #tip .tip-row { display: flex; align-items: center; gap: 8px; }
 #tip .tip-key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
-#tip .tip-value { font-weight: 600; font-variant-numeric: tabular-nums; }
-#tip .tip-name { color: var(--text-2); }
+#tip .tip-value { color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; }
+#tip .tip-name { color: var(--title); }
 
-@media (max-width: 900px) {
-  .hero-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .hero-row .hero { grid-column: 1 / -1; }
-}
-@media (max-width: 640px) {
+@media (max-width: 860px) {
+  body { padding: 0; }
+  .window { border-radius: 0; }
+  .window-body { padding: 10px 12px 12px; }
+  .titlebar { height: 40px; font-size: 22px; }
+  .inset { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .sidebar { padding: 12px; border-right: 0; box-shadow: none; border-bottom: 1px solid #000; }
+  .nav-group + .nav-group { margin-top: 12px; }
+  .nav-head { margin-right: 0; font-size: 16px; padding: 4px 12px; }
+  .nav-items { flex-direction: row; flex-wrap: wrap; }
+  .nav-item { width: auto; padding: 5px 12px; font-size: 15px; }
+  .content { padding: 16px 12px 18px; }
+  .page-head h2 { font-size: 24px; }
+  .pill { min-width: 150px; }
+  .rows { padding-left: 0; }
+  .row { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 8px 0; }
   .grid-2 { grid-template-columns: minmax(0, 1fr); }
-  .stat-value { font-size: 20px; }
 }
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <h1>Mariposa</h1>
-    <span class="meta" id="meta"></span>
-    <button type="button" id="theme">Theme</button>
-  </header>
+<div class="window">
+  <div class="titlebar">Mariposa</div>
+  <div class="window-body">
+    <div class="topbar">
+      <input type="search" class="search" id="search" placeholder="Search ledger" aria-label="Search ledger">
+    </div>
+    <div class="inset">
+      <nav class="sidebar" aria-label="Dashboard">
+        <div class="nav-group">
+          <div class="nav-head">Reports</div>
+          <div class="nav-items" id="page-nav"></div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-head">Characters</div>
+          <div class="nav-items" id="pocket-nav"></div>
+        </div>
+      </nav>
 
-  <div class="filters">
-    <div class="segmented" role="group" aria-label="Date range" id="range"></div>
-    <select id="pocket" aria-label="Character"></select>
+      <main class="content">
+        <div class="page-head">
+          <h2 id="page-title">Overview</h2>
+          <div class="stepper" role="group" aria-label="Date range">
+            <button type="button" class="arrow prev" id="range-prev" aria-label="Shorter range"></button>
+            <select class="pill" id="range-select" aria-label="Date range"></select>
+            <button type="button" class="arrow next" id="range-next" aria-label="Longer range"></button>
+          </div>
+        </div>
+
+        <section class="page" data-page="overview">
+          <div class="rows">
+            <div class="row"><span class="row-label" id="worth-label">Net worth</span><span class="pill hero" id="worth"></span><span class="row-note" id="worth-delta"></span></div>
+            <div class="row"><span class="row-label">Income</span><span class="pill" id="kpi-income"></span><span class="row-note" id="kpi-income-delta"></span></div>
+            <div class="row"><span class="row-label">Expenses</span><span class="pill" id="kpi-expense"></span><span class="row-note" id="kpi-expense-delta"></span></div>
+            <div class="row"><span class="row-label">Net</span><span class="pill" id="kpi-net"></span><span class="row-note" id="kpi-net-delta"></span></div>
+            <div class="row"><span class="row-label">Per day</span><span class="pill" id="kpi-day"></span><span class="row-note" id="kpi-day-delta"></span></div>
+          </div>
+          <div class="panel">
+            <h3 id="worth-title">Net worth over time</h3>
+            <p class="sub" id="worth-sub"></p>
+            <div class="chart" id="worth-chart"></div>
+            <details><summary>Show as table</summary><div class="table-wrap" id="worth-table"></div></details>
+          </div>
+          <div class="panel">
+            <h3 id="daily-title">Daily income and expenses</h3>
+            <p class="sub">Transfers aren't counted.</p>
+            <div class="legend">
+              <span><i class="swatch" style="background: var(--income)"></i>Income</span>
+              <span><i class="swatch" style="background: var(--expense)"></i>Expenses</span>
+            </div>
+            <div class="chart" id="daily-chart"></div>
+            <details><summary>Show as table</summary><div class="table-wrap" id="daily-table"></div></details>
+          </div>
+        </section>
+
+        <section class="page grid-2" data-page="breakdown" hidden>
+          <div class="panel">
+            <h3>Income by source</h3>
+            <p class="sub" id="income-sub"></p>
+            <div class="bars" id="income-bars"></div>
+          </div>
+          <div class="panel">
+            <h3>Expenses by category</h3>
+            <p class="sub" id="expense-sub"></p>
+            <div class="bars" id="expense-bars"></div>
+          </div>
+        </section>
+
+        <section class="page" data-page="characters" hidden>
+          <div class="panel">
+            <h3>Balances and flows</h3>
+            <p class="sub">Balances are current; flows are for the selected range.</p>
+            <div class="table-wrap" id="pockets-table"></div>
+          </div>
+        </section>
+
+        <section class="page" data-page="ledger" hidden>
+          <div class="panel">
+            <div class="panel-head">
+              <div><h3>Transactions</h3><p class="sub" id="ledger-sub"></p></div>
+              <select class="pill" id="ledger-cat" aria-label="Ledger category"></select>
+            </div>
+            <div class="table-wrap" id="ledger-table"></div>
+            <button type="button" class="btn-red more" id="ledger-more" hidden>Show more</button>
+          </div>
+        </section>
+      </main>
+    </div>
+    <div class="footer">
+      <span class="meta" id="meta"></span>
+      <button type="button" class="btn-red" id="export">Export CSV</button>
+    </div>
   </div>
-
-  <section class="hero-row">
-    <div class="card hero">
-      <div class="stat-label" id="worth-label">Net worth</div>
-      <div class="stat-value" id="worth"></div>
-      <div class="delta" id="worth-delta"></div>
-    </div>
-    <div class="card"><div class="stat-label">Income</div><div class="stat-value" id="kpi-income"></div><div class="delta" id="kpi-income-delta"></div></div>
-    <div class="card"><div class="stat-label">Expenses</div><div class="stat-value" id="kpi-expense"></div><div class="delta" id="kpi-expense-delta"></div></div>
-    <div class="card"><div class="stat-label">Net</div><div class="stat-value" id="kpi-net"></div><div class="delta" id="kpi-net-delta"></div></div>
-    <div class="card"><div class="stat-label">Per day</div><div class="stat-value" id="kpi-day"></div><div class="delta" id="kpi-day-delta"></div></div>
-  </section>
-
-  <section class="card">
-    <h2 id="worth-title">Net worth over time</h2>
-    <p class="sub" id="worth-sub"></p>
-    <div class="chart" id="worth-chart"></div>
-    <details><summary>Show as table</summary><div class="table-wrap" id="worth-table"></div></details>
-  </section>
-
-  <section class="card">
-    <h2>Daily income and expenses</h2>
-    <p class="sub">Transfers aren't counted.</p>
-    <div class="legend">
-      <span><i class="swatch" style="background: var(--income)"></i>Income</span>
-      <span><i class="swatch" style="background: var(--expense)"></i>Expenses</span>
-    </div>
-    <div class="chart" id="daily-chart"></div>
-    <details><summary>Show as table</summary><div class="table-wrap" id="daily-table"></div></details>
-  </section>
-
-  <section class="grid-2">
-    <div class="card">
-      <h2>Income by source</h2>
-      <p class="sub" id="income-sub"></p>
-      <div class="bars" id="income-bars"></div>
-    </div>
-    <div class="card">
-      <h2>Expenses by category</h2>
-      <p class="sub" id="expense-sub"></p>
-      <div class="bars" id="expense-bars"></div>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>Characters</h2>
-    <p class="sub">Balances are current; flows are for the selected range.</p>
-    <div class="table-wrap" id="pockets-table"></div>
-  </section>
-
-  <section class="card">
-    <div class="card-head">
-      <div><h2>Ledger</h2><p class="sub" id="ledger-sub"></p></div>
-      <select id="ledger-cat" aria-label="Ledger category"></select>
-    </div>
-    <div class="table-wrap" id="ledger-table"></div>
-    <button type="button" class="more" id="ledger-more" hidden>Show more</button>
-  </section>
-</main>
+</div>
 <div id="tip" role="status" hidden></div>
 
 <script type="application/json" id="mariposa-data">/*__MARIPOSA_DATA__*/null</script>
@@ -248,20 +363,48 @@ const D = JSON.parse(document.getElementById("mariposa-data").textContent);
 const G = 10000;
 const NS = "http://www.w3.org/2000/svg";
 const TRANSFERS = new Set(D.transfers);
-const RANGES = [[7, "7 days"], [30, "30 days"], [90, "90 days"], ["all", "All time"]];
+const RANGES = [[1, "1 day"], [7, "7 days"], [30, "30 days"], [90, "90 days"], ["all", "All time"]];
 const LEDGER_PAGE = 50;
 
 // ---------------------------------------------------------------------------
 // Formatting
 
 const nf = new Intl.NumberFormat("en-US");
-function gold(copper, signed = false) {
+// Whole gold, or silver/copper for small amounts (postage, flights) that
+// would otherwise round to 0g. Shared by the text and coin-icon formats.
+function coinParts(copper, signed) {
   const abs = Math.round(Math.abs(copper));
   const sign = abs === 0 ? "" : copper < 0 ? "−" : signed ? "+" : "";
-  // Small amounts (postage, flights) would otherwise round to 0g.
-  if (abs > 0 && abs < G) return sign + (abs >= 100 ? Math.floor(abs / 100) + "s" : abs + "c");
-  return sign + nf.format(Math.round(abs / G)) + "g";
+  if (abs > 0 && abs < G) return abs >= 100 ? { sign, n: Math.floor(abs / 100), unit: "s" } : { sign, n: abs, unit: "c" };
+  return { sign, n: Math.round(abs / G), unit: "g" };
 }
+function gold(copper, signed = false) {
+  const { sign, n, unit } = coinParts(copper, signed);
+  return sign + nf.format(n) + unit;
+}
+// The same amount as a node with coin icons, for stats and tables.
+function money(copper, signed = false) {
+  const { sign, n, unit } = coinParts(copper, signed);
+  const span = el("span", { class: "money" }, sign + nf.format(n));
+  span.append(el("i", { class: `coin ${unit}`, "aria-hidden": "true" }), el("span", { class: "sr" }, unit));
+  return span;
+}
+
+// RAID_CLASS_COLORS from the game; the warband uses the artifact item color.
+const CLASS_COLORS = {
+  DEATHKNIGHT: "#c41e3a", DEMONHUNTER: "#a330c9", DRUID: "#ff7c0a", EVOKER: "#33937f",
+  HUNTER: "#aad372", MAGE: "#3fc7eb", MONK: "#00ff98", PALADIN: "#f48cba", PRIEST: "#ffffff",
+  ROGUE: "#fff468", SHAMAN: "#0070dd", WARLOCK: "#8788ee", WARRIOR: "#c69b6d",
+};
+// Lighter shades for the three class colors under 4.5:1 on the dark panels,
+// used where the color is the text itself (sidebar dots keep the true color).
+const TEXT_SHADES = { DEATHKNIGHT: "#e8475f", DEMONHUNTER: "#b862dc", SHAMAN: "#3b93f0" };
+function nameNode(p) {
+  const span = el("span", {}, p.name);
+  span.style.color = (p.kind === "character" && TEXT_SHADES[p.cls]) || classColor(p);
+  return span;
+}
+
 // Two decimals so neighboring axis ticks (3.5M, 3.55M) stay distinct.
 const compactFmt = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 });
 function compact(copper) {
@@ -271,6 +414,21 @@ function compact(copper) {
 const dayFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 const timeFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 const fmtDay = ts => dayFmt.format(new Date(ts * 1000));
+const hourFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric" });
+const fmtHour = ts => hourFmt.format(new Date(ts * 1000));
+
+// Short axis labels, or full amounts when the short ones would repeat
+// (a narrow range like 3,764,100g..3,764,600g all reads "3.76M").
+function axisLabels(ticks) {
+  const short = ticks.map(compact);
+  if (new Set(short).size === short.length) return short;
+  // Enough decimals for the tick step, down to a copper (0.0001g).
+  const step = ticks.length > 1 ? Math.abs(ticks[1] - ticks[0]) / G : 1;
+  const digits = Math.min(4, Math.max(0, Math.ceil(-Math.log10(step))));
+  const fmt = new Intl.NumberFormat("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return ticks.map(t => (t < 0 ? "−" : "") + fmt.format(Math.abs(t) / G) + "g");
+}
+const axisMargin = labels => Math.max(52, 14 + 6.5 * Math.max(...labels.map(l => l.length)));
 const label = cat => D.labels[cat] || cat;
 
 // ---------------------------------------------------------------------------
@@ -293,19 +451,19 @@ function addDays(dayTs, n) {
 // ---------------------------------------------------------------------------
 // State
 
-const state = { range: 30, pocket: "all", ledgerCat: "all", ledgerShown: LEDGER_PAGE };
+const state = { range: 30, pocket: "all", page: "overview", ledgerCat: "all", query: "", ledgerShown: LEDGER_PAGE };
 function loadPrefs() {
   try {
     const saved = JSON.parse(localStorage.getItem("mariposa.filters") || "{}");
     if (RANGES.some(([v]) => v === saved.range)) state.range = saved.range;
     if (saved.pocket === "all" || D.pockets.some(p => p.key === saved.pocket)) state.pocket = saved.pocket;
-    if (saved.theme) document.documentElement.dataset.theme = saved.theme;
+    if (PAGES.some(([id]) => id === saved.page)) state.page = saved.page;
   } catch (_) { /* storage unavailable */ }
 }
 function savePrefs() {
   try {
     localStorage.setItem("mariposa.filters", JSON.stringify({
-      range: state.range, pocket: state.pocket, theme: document.documentElement.dataset.theme,
+      range: state.range, pocket: state.pocket, page: state.page,
     }));
   } catch (_) { /* storage unavailable */ }
 }
@@ -321,9 +479,25 @@ function compute() {
   const endDay = startOfDay(endTs);
   const firstTs = D.tx.length ? D.tx[0][1] : endTs;
   const startDay = state.range === "all" ? startOfDay(firstTs) : addDays(endDay, -(state.range - 1));
-  const days = [];
-  for (let d = startDay; d <= endDay; d = addDays(d, 1)) days.push(d);
-  const prevStart = addDays(startDay, -days.length);
+  // One day is bucketed by hour, longer ranges by day.
+  const hourly = state.range === 1;
+  const starts = [];
+  if (hourly) {
+    for (let h = 0; h < 24; h++) {
+      const d = new Date(startDay * 1000);
+      d.setHours(h, 0, 0, 0);
+      const t = d.getTime() / 1000;
+      if (t > endTs) break;
+      if (t !== starts[starts.length - 1]) starts.push(t);  // DST can repeat an hour
+    }
+  } else {
+    for (let d = startDay; d <= endDay; d = addDays(d, 1)) starts.push(d);
+  }
+  const ndays = hourly ? 1 : starts.length;
+  const prevStart = addDays(startDay, -ndays);
+  // Compare like with like: the current period is still in progress, so only
+  // count the same elapsed time of the previous one (today vs. yesterday by now).
+  const prevEnd = prevStart + (endTs - startDay);
 
   const pocketIdx = state.pocket === "all" ? -1 : D.pockets.findIndex(p => p.key === state.pocket);
   const inPocket = t => pocketIdx < 0 || t[0] === pocketIdx;
@@ -332,8 +506,15 @@ function compute() {
     ? D.pockets.reduce((s, p) => s + p.gold, 0)
     : D.pockets[pocketIdx].gold;
 
-  const dayIndex = new Map(days.map((d, i) => [d, i]));
-  const daily = days.map(day => ({ day, inc: 0, exp: 0, delta: 0 }));
+  const dayIndex = new Map(starts.map((d, i) => [d, i]));
+  const bucketOf = hourly
+    ? ts => { let i = starts.length - 1; while (i > 0 && starts[i] > ts) i--; return i; }
+    : ts => dayIndex.get(startOfDay(ts));
+  const daily = starts.map(start => ({
+    start, inc: 0, exp: 0, delta: 0,
+    label: hourly ? fmtHour(start) : fmtDay(start),
+    tip: hourly ? `${fmtDay(start)}, ${fmtHour(start)}` : fmtDay(start),
+  }));
   const incomeCats = new Map(), expenseCats = new Map();
   const perPocket = D.pockets.map(() => ({ inc: 0, exp: 0, xfer: 0 }));
   const cur = { inc: 0, exp: 0 }, prev = { inc: 0, exp: 0 };
@@ -344,7 +525,7 @@ function compute() {
     if (ts < prevStart || ts > endTs) continue;
     const isXfer = TRANSFERS.has(cat);
     if (ts < startDay) {
-      if (inPocket(t) && !isXfer) (amount > 0 ? prev.inc += amount : prev.exp += amount);
+      if (ts <= prevEnd && inPocket(t) && !isXfer) (amount > 0 ? prev.inc += amount : prev.exp += amount);
       continue;
     }
     if (isXfer) perPocket[pi].xfer += amount;
@@ -352,7 +533,7 @@ function compute() {
     else perPocket[pi].exp += amount;
     if (!inPocket(t)) continue;
 
-    const di = dayIndex.get(startOfDay(ts));
+    const di = bucketOf(ts);
     if (di !== undefined) daily[di].delta += amount;
     // The warband mirror of a deposit only belongs in the ledger when the
     // warband itself is selected; otherwise the character's row already shows it.
@@ -371,8 +552,8 @@ function compute() {
 
   // Walk balances backwards from today's.
   let bal = current;
-  const worth = new Array(days.length);
-  for (let i = days.length - 1; i >= 0; i--) {
+  const worth = new Array(daily.length);
+  for (let i = daily.length - 1; i >= 0; i--) {
     worth[i] = bal;
     bal -= daily[i].delta;
   }
@@ -380,7 +561,7 @@ function compute() {
   ledger.reverse();
   const byAmount = (a, b) => Math.abs(b[1]) - Math.abs(a[1]);
   return {
-    days, daily, worth, current, startBalance: bal,
+    daily, hourly, ndays, worth, current, startBalance: bal,
     cur, prev,
     // Only compare against a previous period the data fully covers.
     hasPrev: state.range !== "all" && pocketFirstTs <= prevStart,
@@ -405,17 +586,18 @@ function svg(tag, attrs = {}, parent) {
   if (parent) parent.appendChild(e);
   return e;
 }
-function table(host, headers, rows, rowClass) {
+function table(host, headers, rows) {
   const t = el("table");
   const head = el("tr");
   headers.forEach(([text, num]) => head.appendChild(el("th", num ? { class: "num" } : {}, text)));
   t.appendChild(el("thead")).appendChild(head);
   const body = t.appendChild(el("tbody"));
-  rows.forEach((cells, i) => {
-    const tr = body.appendChild(el("tr", rowClass ? { class: rowClass(i) } : {}));
+  rows.forEach(cells => {
+    const tr = body.appendChild(el("tr"));
     cells.forEach((text, j) => {
       const cls = [headers[j][1] ? "num" : "", headers[j][2] || ""].join(" ").trim();
-      tr.appendChild(el("td", cls ? { class: cls } : {}, text));
+      const td = tr.appendChild(el("td", cls ? { class: cls } : {}));
+      if (text instanceof Node) td.appendChild(text); else td.textContent = text;
     });
   });
   host.replaceChildren(t);
@@ -480,24 +662,26 @@ function keyboardScrub(node, n, show, hide) {
 // ---------------------------------------------------------------------------
 // Net worth line
 
-function renderWorth(host, days, values) {
+function renderWorth(host, buckets, values) {
   host.replaceChildren();
-  const W = Math.max(280, host.clientWidth), H = 240;
-  const m = { l: 52, r: 64, t: 12, b: 28 };
-  const pw = W - m.l - m.r, ph = H - m.t - m.b;
   const { lo, hi, ticks } = niceTicks(Math.min(...values), Math.max(...values));
-  const x = i => m.l + (days.length === 1 ? pw / 2 : i * pw / (days.length - 1));
+  const yLabels = axisLabels(ticks);
+  const W = Math.max(280, host.clientWidth), H = 240;
+  const m = { l: axisMargin(yLabels), r: 64, t: 12, b: 28 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const n = buckets.length;
+  const x = i => m.l + (n === 1 ? pw / 2 : i * pw / (n - 1));
   const y = v => m.t + ph - (v - lo) / (hi - lo) * ph;
 
   const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img",
-    "aria-label": `Net worth, ${fmtDay(days[0])} to ${fmtDay(days[days.length - 1])}` }, host);
-  for (const t of ticks) {
+    "aria-label": `Net worth, ${buckets[0].tip} to ${buckets[n - 1].tip}` }, host);
+  ticks.forEach((t, k) => {
     svg("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: "var(--grid)", "stroke-width": 1 }, root);
-    svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, root).textContent = compact(t);
-  }
-  for (const i of dateTickIndexes(days.length, pw)) {
-    svg("text", { x: x(i), y: H - 8, "text-anchor": i === 0 ? "start" : i === days.length - 1 ? "end" : "middle" }, root)
-      .textContent = fmtDay(days[i]);
+    svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, root).textContent = yLabels[k];
+  });
+  for (const i of dateTickIndexes(n, pw)) {
+    svg("text", { x: x(i), y: H - 8, "text-anchor": i === 0 ? "start" : i === n - 1 ? "end" : "middle" }, root)
+      .textContent = buckets[i].label;
   }
   const d = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
   svg("path", { d, fill: "none", stroke: "var(--worth)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, root);
@@ -515,18 +699,18 @@ function renderWorth(host, days, values) {
     const box = root.getBoundingClientRect(), scale = box.width / W;
     const px = fromKey ? box.left + x(i) * scale : ev.clientX;
     const py = fromKey ? box.top + y(values[i]) * scale : ev.clientY;
-    showTip(px, py, fmtDay(days[i]), [{ value: gold(values[i]), name: state.pocket === "all" ? "Net worth" : "Balance", color: "var(--worth)" }]);
+    showTip(px, py, buckets[i].tip, [{ value: gold(values[i]), name: state.pocket === "all" ? "Net worth" : "Balance", color: "var(--worth)" }]);
   };
   const hide = () => { cross.setAttribute("visibility", "hidden"); hideTip(); };
   const hit = svg("rect", { x: m.l, y: m.t, width: pw, height: ph, fill: "transparent" }, root);
   hit.addEventListener("pointermove", ev => {
     const box = root.getBoundingClientRect();
     const px = (ev.clientX - box.left) * W / box.width;
-    const i = days.length === 1 ? 0 : Math.round((px - m.l) / pw * (days.length - 1));
-    show(Math.max(0, Math.min(days.length - 1, i)), false, ev);
+    const i = n === 1 ? 0 : Math.round((px - m.l) / pw * (n - 1));
+    show(Math.max(0, Math.min(n - 1, i)), false, ev);
   });
   hit.addEventListener("pointerleave", hide);
-  keyboardScrub(root, days.length, show, hide);
+  keyboardScrub(root, n, show, hide);
 }
 
 // ---------------------------------------------------------------------------
@@ -547,25 +731,26 @@ function renderDaily(host, daily) {
     host.appendChild(el("div", { class: "empty" }, "No income or expenses in this range"));
     return;
   }
-  const W = Math.max(280, host.clientWidth), H = 240;
-  const m = { l: 52, r: 16, t: 12, b: 28 };
-  const pw = W - m.l - m.r, ph = H - m.t - m.b;
   const maxInc = Math.max(0, ...daily.map(d => d.inc));
   const minExp = Math.min(0, ...daily.map(d => d.exp));
   const { lo, hi, ticks } = niceTicks(minExp, maxInc);
+  const yLabels = axisLabels(ticks);
+  const W = Math.max(280, host.clientWidth), H = 240;
+  const m = { l: axisMargin(yLabels), r: 16, t: 12, b: 28 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
   const y = v => m.t + ph - (v - lo) / (hi - lo) * ph;
   const band = pw / daily.length;
   const bw = Math.max(1, Math.min(24, band * 0.7, band - 2));
   const bx = i => m.l + i * band + (band - bw) / 2;
 
   const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img",
-    "aria-label": "Daily income and expenses" }, host);
-  for (const t of ticks) {
+    "aria-label": "Income and expenses" }, host);
+  ticks.forEach((t, k) => {
     svg("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: "var(--grid)", "stroke-width": 1 }, root);
-    svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, root).textContent = compact(t);
-  }
+    svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, root).textContent = yLabels[k];
+  });
   for (const i of dateTickIndexes(daily.length, pw)) {
-    svg("text", { x: m.l + (i + 0.5) * band, y: H - 8, "text-anchor": "middle" }, root).textContent = fmtDay(daily[i].day);
+    svg("text", { x: m.l + (i + 0.5) * band, y: H - 8, "text-anchor": "middle" }, root).textContent = daily[i].label;
   }
   const wash = svg("rect", { y: m.t, height: ph, width: band, fill: "var(--wash)", visibility: "hidden" }, root);
   const r = Math.min(4, bw / 2);
@@ -582,7 +767,7 @@ function renderDaily(host, daily) {
     const box = root.getBoundingClientRect(), scale = box.width / W;
     const px = fromKey ? box.left + (m.l + (i + 0.5) * band) * scale : ev.clientX;
     const py = fromKey ? box.top + y(0) * scale : ev.clientY;
-    showTip(px, py, fmtDay(d.day), [
+    showTip(px, py, d.tip, [
       { value: gold(d.inc, true), name: "Income", color: "var(--income)" },
       { value: gold(d.exp, true), name: "Expenses", color: "var(--expense)" },
       { value: gold(d.inc + d.exp, true), name: "Net" },
@@ -618,7 +803,7 @@ function renderBars(host, entries, color, total) {
     const bar = track.appendChild(el("span", { class: "bar" }));
     bar.style.background = color;
     bar.style.width = `calc((100% - 96px) * ${Math.abs(amount) / max})`;
-    track.appendChild(el("span", { class: "bar-value" }, gold(amount)));
+    track.appendChild(el("span", { class: "bar-value" })).appendChild(money(amount));
     const tipRows = [{ value: gold(amount), name: `${share}% of total`, color }];
     row.addEventListener("pointermove", ev => showTip(ev.clientX, ev.clientY, label(cat), tipRows));
     row.addEventListener("pointerleave", hideTip);
@@ -645,72 +830,127 @@ function setDelta(node, curValue, prevValue, upIsGood) {
   const amount = prevValue === 0 ? "from 0" : `${Math.abs(Math.round(diff / Math.abs(prevValue) * 100))}%`;
   const mark = el("span", good === null ? {} : { class: good ? "good" : "bad" },
     `${diff === 0 ? "→" : up ? "▲" : "▼"} ${diff === 0 ? "0%" : amount}`);
-  node.append(mark, ` vs previous ${state.range} days`);
+  node.append(mark, state.range === 1 ? " vs this time yesterday" : ` vs previous ${state.range} days`);
 }
 
 // ---------------------------------------------------------------------------
 // Render
 
+const PAGES = [
+  ["overview", "Overview"], ["breakdown", "Income & Expenses"],
+  ["characters", "Characters"], ["ledger", "Ledger"],
+];
 let model;
 
-function renderControls() {
-  const range = document.getElementById("range");
-  range.replaceChildren();
-  for (const [value, text] of RANGES) {
-    const b = range.appendChild(el("button", { type: "button", "aria-pressed": String(state.range === value) }, text));
-    b.addEventListener("click", () => { state.range = value; state.ledgerShown = LEDGER_PAGE; update(); });
-  }
-  const select = document.getElementById("pocket");
-  if (!select.options.length) {
-    select.appendChild(el("option", { value: "all" }, "All characters"));
-    for (const p of D.pockets) {
-      select.appendChild(el("option", { value: p.key }, p.realm ? `${p.name} – ${p.realm}` : p.name));
-    }
-    select.addEventListener("change", () => { state.pocket = select.value; state.ledgerShown = LEDGER_PAGE; update(); });
-  }
-  select.value = state.pocket;
+function classColor(p) {
+  return p.kind === "warband" ? "#e6cc80" : CLASS_COLORS[p.cls] || "";
 }
 
+// Sidebar entries are built once; selection only moves aria-current, so
+// keyboard focus survives a click.
+function buildNav() {
+  const item = (text, key, onClick, color) => {
+    const b = el("button", { type: "button", class: "nav-item", "data-key": key });
+    if (color) b.appendChild(el("i", { class: "class-dot", "aria-hidden": "true" })).style.background = color;
+    b.append(text);
+    b.addEventListener("click", onClick);
+    return b;
+  };
+  document.getElementById("page-nav").replaceChildren(
+    ...PAGES.map(([id, text]) => item(text, id, () => showPage(id))));
+  document.getElementById("pocket-nav").replaceChildren(
+    item("All characters", "all", () => setPocket("all")),
+    ...D.pockets.map(p => item(p.name, p.key, () => setPocket(p.key), classColor(p))));
+}
+
+function renderNav() {
+  const mark = (id, current, kind) => {
+    for (const b of document.getElementById(id).children) {
+      if (b.dataset.key === current) b.setAttribute("aria-current", kind);
+      else b.removeAttribute("aria-current");
+    }
+  };
+  mark("page-nav", state.page, "page");
+  mark("pocket-nav", state.pocket, "true");
+  const i = RANGES.findIndex(([v]) => v === state.range);
+  document.getElementById("range-select").value = String(RANGES[i][0]);
+  document.getElementById("range-prev").disabled = i === 0;
+  document.getElementById("range-next").disabled = i === RANGES.length - 1;
+}
+
+function setVisiblePage(id) {
+  state.page = id;
+  for (const page of document.querySelectorAll(".page")) page.hidden = page.dataset.page !== id;
+  document.getElementById("page-title").textContent = PAGES.find(([p]) => p === id)[1];
+}
+
+function showPage(id) {
+  setVisiblePage(id);
+  savePrefs();
+  renderNav();
+  // Charts measure their container, so draw them once they're visible.
+  if (id === "overview") renderCharts();
+}
+
+function setPocket(key) {
+  state.pocket = key;
+  state.ledgerShown = LEDGER_PAGE;
+  update();
+}
+
+function stepRange(dir) {
+  const i = RANGES.findIndex(([v]) => v === state.range) + dir;
+  if (i < 0 || i >= RANGES.length) return;
+  state.range = RANGES[i][0];
+  state.ledgerShown = LEDGER_PAGE;
+  update();
+}
+
+let chartWidth = 0;  // container width at the last draw
 function renderCharts() {
-  renderWorth(document.getElementById("worth-chart"), model.days, model.worth);
+  if (state.page !== "overview") return;
+  chartWidth = document.getElementById("worth-chart").clientWidth;
+  renderWorth(document.getElementById("worth-chart"), model.daily, model.worth);
   renderDaily(document.getElementById("daily-chart"), model.daily);
 }
 
 function update() {
   savePrefs();
-  renderControls();
   model = compute();
+  renderNav();
   const { cur, prev } = model;
-  const ndays = model.days.length;
+  const ndays = model.ndays;
+  const unit = model.hourly ? "hour" : "day";
 
   const single = model.pocketIdx >= 0;
   document.getElementById("worth-label").textContent = single ? "Balance" : "Net worth";
   document.getElementById("worth-title").textContent = single ? "Balance over time" : "Net worth over time";
   document.getElementById("worth-sub").textContent = single
-    ? "Balance at the end of each day, including transfers to and from your other characters."
-    : "Balance at the end of each day. Transfers between your own characters don't change the total.";
-  document.getElementById("worth").textContent = gold(model.current);
+    ? `Balance at the end of each ${unit}, including transfers to and from your other characters.`
+    : `Balance at the end of each ${unit}. Transfers between your own characters don't change the total.`;
+  document.getElementById("daily-title").textContent = model.hourly ? "Hourly income and expenses" : "Daily income and expenses";
+  document.getElementById("worth").replaceChildren(money(model.current));
   const change = model.current - model.startBalance;
-  const wd = document.getElementById("worth-delta");
-  wd.replaceChildren(
+  document.getElementById("worth-delta").replaceChildren(
     el("span", change === 0 ? {} : { class: change > 0 ? "good" : "bad" },
       `${change > 0 ? "▲" : change < 0 ? "▼" : "→"} ${gold(change, true)}`),
-    state.range === "all" ? " all time" : ` over ${state.range} days`);
+    state.range === "all" ? " all time" : state.range === 1 ? " today" : ` over ${state.range} days`);
 
-  document.getElementById("kpi-income").textContent = gold(cur.inc);
-  document.getElementById("kpi-expense").textContent = gold(cur.exp);
-  document.getElementById("kpi-net").textContent = gold(cur.inc + cur.exp, true);
-  document.getElementById("kpi-day").textContent = gold((cur.inc + cur.exp) / ndays, true);
+  document.getElementById("kpi-income").replaceChildren(money(cur.inc));
+  document.getElementById("kpi-expense").replaceChildren(money(cur.exp));
+  document.getElementById("kpi-net").replaceChildren(money(cur.inc + cur.exp, true));
+  document.getElementById("kpi-day").replaceChildren(money((cur.inc + cur.exp) / ndays, true));
   setDelta(document.getElementById("kpi-income-delta"), cur.inc, prev.inc, true);
   setDelta(document.getElementById("kpi-expense-delta"), -cur.exp, -prev.exp, false);
   setDelta(document.getElementById("kpi-net-delta"), cur.inc + cur.exp, prev.inc + prev.exp, true);
   document.getElementById("kpi-day-delta").textContent = `average over ${ndays} day${ndays === 1 ? "" : "s"}`;
 
   renderCharts();
-  table(document.getElementById("worth-table"), [["Date"], ["Net worth", true]],
-    model.days.map((d, i) => [fmtDay(d), gold(model.worth[i])]).reverse());
-  table(document.getElementById("daily-table"), [["Date"], ["Income", true], ["Expenses", true], ["Net", true]],
-    model.daily.map(d => [fmtDay(d.day), gold(d.inc, true), gold(d.exp, true), gold(d.inc + d.exp, true)]).reverse());
+  const when = model.hourly ? "Hour" : "Date";
+  table(document.getElementById("worth-table"), [[when], [single ? "Balance" : "Net worth", true]],
+    model.daily.map((d, i) => [d.tip, money(model.worth[i])]).reverse());
+  table(document.getElementById("daily-table"), [[when], ["Income", true], ["Expenses", true], ["Net", true]],
+    model.daily.map(d => [d.tip, money(d.inc, true), money(d.exp, true), money(d.inc + d.exp, true)]).reverse());
 
   document.getElementById("income-sub").textContent = `${gold(cur.inc)} total`;
   document.getElementById("expense-sub").textContent = `${gold(cur.exp)} total`;
@@ -722,14 +962,22 @@ function update() {
     .filter(({ p }) => model.pocketIdx < 0 || p.key === state.pocket);
   table(document.getElementById("pockets-table"),
     [["Name"], ["Realm"], ["Balance", true], ["Income", true], ["Expenses", true], ["Transfers", true], ["Net", true]],
-    pocketRows.map(({ p, f }) => [p.name, p.realm, gold(p.gold), gold(f.inc, true), gold(f.exp, true),
-      gold(f.xfer, true), gold(f.inc + f.exp, true)]),
-    i => pocketRows[i].p.kind === "warband" ? "warband" : "");
+    pocketRows.map(({ p, f }) => [nameNode(p), p.realm, money(p.gold), money(f.inc, true), money(f.exp, true),
+      money(f.xfer, true), money(f.inc + f.exp, true)]));
 
   renderLedger();
 }
 
-// The ledger re-renders on its own, so paging doesn't recompute everything.
+// Ledger rows after the category filter and search box.
+function ledgerRows() {
+  const q = state.query;
+  return model.ledger.filter(([pi, , , cat, ref]) =>
+    (state.ledgerCat === "all" || cat === state.ledgerCat) &&
+    (!q || D.pockets[pi].name.toLowerCase().includes(q) || label(cat).toLowerCase().includes(q) ||
+      (ref != null && String(ref).toLowerCase().includes(q))));
+}
+
+// The ledger re-renders on its own, so paging and search don't recompute everything.
 function renderLedger() {
   const catSelect = document.getElementById("ledger-cat");
   const cats = [...new Set(model.ledger.map(t => t[3]))].sort((a, b) => label(a).localeCompare(label(b)));
@@ -737,15 +985,36 @@ function renderLedger() {
   catSelect.replaceChildren(el("option", { value: "all" }, "All categories"),
     ...cats.map(c => el("option", { value: c }, label(c))));
   catSelect.value = state.ledgerCat;
-  const rows = state.ledgerCat === "all" ? model.ledger : model.ledger.filter(t => t[3] === state.ledgerCat);
+  const rows = ledgerRows();
   const shown = rows.slice(0, state.ledgerShown);
   document.getElementById("ledger-sub").textContent =
-    `${nf.format(rows.length)} transactions in range, newest first`;
+    `${nf.format(rows.length)} transactions${state.query ? ` matching “${state.query}”` : ""}, newest first`;
   table(document.getElementById("ledger-table"),
     [["Time"], ["Character"], ["Category"], ["Amount", true], ["Detail", false, "ref"]],
-    shown.map(([pi, ts, amount, cat, ref]) => [timeFmt.format(new Date(ts * 1000)), D.pockets[pi].name,
-      label(cat) + (TRANSFERS.has(cat) ? " (transfer)" : ""), gold(amount, true), ref == null ? "" : String(ref)]));
+    shown.map(([pi, ts, amount, cat, ref]) => [timeFmt.format(new Date(ts * 1000)), nameNode(D.pockets[pi]),
+      label(cat) + (TRANSFERS.has(cat) ? " (transfer)" : ""), money(amount, true), ref == null ? "" : String(ref)]));
   document.getElementById("ledger-more").hidden = shown.length >= rows.length;
+}
+
+function exportCsv() {
+  // Prefix text that a spreadsheet would read as a formula.
+  const text = v => {
+    const s = v == null ? "" : String(v);
+    const safe = /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
+    return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+  };
+  const lines = [["time", "character", "realm", "category", "copper", "detail"].join(",")];
+  for (const [pi, ts, amount, cat, ref] of ledgerRows()) {
+    const p = D.pockets[pi];
+    lines.push([new Date(ts * 1000).toISOString(), text(p.name), text(p.realm), text(label(cat)), amount, text(ref)].join(","));
+  }
+  const url = URL.createObjectURL(new Blob([lines.join("\n") + "\n"], { type: "text/csv" }));
+  const a = el("a", { href: url, download: "mariposa-ledger.csv" });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Some browsers start blob downloads asynchronously; revoking right away can cancel them.
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 document.getElementById("ledger-cat").addEventListener("change", e => {
@@ -753,31 +1022,41 @@ document.getElementById("ledger-cat").addEventListener("change", e => {
   state.ledgerShown = LEDGER_PAGE;
   renderLedger();
 });
-
 document.getElementById("ledger-more").addEventListener("click", () => {
   state.ledgerShown += LEDGER_PAGE;
   renderLedger();
 });
-document.getElementById("theme").addEventListener("click", () => {
-  const root = document.documentElement;
-  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-  root.dataset.theme = dark ? "light" : "dark";
-  savePrefs();
+document.getElementById("search").addEventListener("input", e => {
+  state.query = e.target.value.trim().toLowerCase();
+  state.ledgerShown = LEDGER_PAGE;
+  if (state.query && state.page !== "ledger") showPage("ledger");
+  renderLedger();
 });
+const rangeSelect = document.getElementById("range-select");
+rangeSelect.replaceChildren(...RANGES.map(([v, text]) => el("option", { value: String(v) }, text)));
+rangeSelect.addEventListener("change", () => {
+  state.range = RANGES.find(([v]) => String(v) === rangeSelect.value)[0];
+  state.ledgerShown = LEDGER_PAGE;
+  update();
+});
+document.getElementById("range-prev").addEventListener("click", () => stepRange(-1));
+document.getElementById("range-next").addEventListener("click", () => stepRange(1));
+document.getElementById("export").addEventListener("click", exportCsv);
 
 const pocketCount = D.pockets.filter(p => p.kind === "character").length;
 document.getElementById("meta").textContent =
   `${pocketCount} character${pocketCount === 1 ? "" : "s"} · updated ${timeFmt.format(new Date(D.generatedAt * 1000))}`;
 
 loadPrefs();
+buildNav();
+setVisiblePage(state.page);
 update();
 // Redraw charts only when their width changes, not when the page grows.
 const chartHost = document.getElementById("worth-chart");
-let resizeTimer, lastWidth = chartHost.clientWidth;
-new ResizeObserver(entries => {
-  const width = Math.round(entries[0].contentRect.width);
-  if (width === lastWidth) return;
-  lastWidth = width;
+let resizeTimer;
+new ResizeObserver(() => {
+  const width = chartHost.clientWidth;
+  if (width === chartWidth || width === 0) return;
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => model && renderCharts(), 100);
 }).observe(chartHost);

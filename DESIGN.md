@@ -69,6 +69,16 @@ net and per-day averages against the previous period, a net-worth line, daily in
 expense columns, breakdowns by category, a per-character table, and the ledger. Everything
 can be filtered by date range and character.
 
+It's laid out like the game's Options window and is dark only, like the game. A sidebar
+lists the report pages (Overview, Income & Expenses, Characters, Ledger) and the characters,
+and the selected character filters every page. The date range is an arrow stepper, a search
+box filters the ledger, and Export CSV downloads the filtered ledger. Money shows with coin
+icons and character names in their class colors. The chart colors (rare-item blue for
+income, red for expenses) pass colorblind-separation and contrast checks against the panel
+background. Bright gold and uncommon-item green don't, so gold is kept to single-series
+accents like the net-worth line and headings. Titles use Friz Quadrata or Cinzel if
+installed, and otherwise fall back to Palatino or Georgia, so nothing is fetched.
+
 The warband bank is treated as its own **pocket**, alongside the characters. Deposits are
 only recorded on the character side, so `dashboard.py` mirrors each one onto the warband.
 Transfers then net to zero across all pockets, and any pocket's balance history is its
