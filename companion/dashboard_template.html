@@ -1,0 +1,787 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mariposa Gold Ledger</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --text-1: #0b0b0b;
+  --text-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --wash: rgba(11, 11, 11, 0.04);
+  --income: #2a78d6;
+  --expense: #e34948;
+  --worth: #2a78d6;
+  --up: #006300;
+  --down: #d03b3b;
+  --brand: #eb6834;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --text-1: #f0efec;
+    --text-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --wash: rgba(255, 255, 255, 0.05);
+    --income: #3987e5;
+    --expense: #e66767;
+    --worth: #3987e5;
+    --up: #0ca30c;
+    --down: #e66767;
+    --brand: #d95926;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --text-1: #f0efec;
+  --text-2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --baseline: #383835;
+  --border: rgba(255, 255, 255, 0.10);
+  --wash: rgba(255, 255, 255, 0.05);
+  --income: #3987e5;
+  --expense: #e66767;
+  --worth: #3987e5;
+  --up: #0ca30c;
+  --down: #e66767;
+  --brand: #d95926;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text-1);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 48px; }
+
+header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+header h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 8px; }
+header h1::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+header .meta { color: var(--text-2); font-size: 13px; }
+header button { margin-left: auto; }
+
+.filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
+.segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.segmented button { border: 0; border-radius: 0; border-right: 1px solid var(--border); }
+.segmented button:last-child { border-right: 0; }
+.segmented button[aria-pressed="true"] { background: var(--wash); color: var(--text-1); font-weight: 600; }
+button, select {
+  font: inherit; color: var(--text-2); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer;
+}
+button:hover, select:hover { color: var(--text-1); }
+button:focus-visible, select:focus-visible, svg:focus-visible, .bar-row:focus-visible {
+  outline: 2px solid var(--worth); outline-offset: 2px;
+}
+
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 16px; margin-bottom: 16px; min-width: 0;
+}
+.card h2 { font-size: 14px; font-weight: 600; margin: 0 0 2px; }
+.card .sub { color: var(--text-2); font-size: 13px; margin: 0 0 12px; }
+
+.hero-row { display: grid; grid-template-columns: minmax(280px, 1.5fr) repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+.hero-row .card { margin: 0; }
+.stat-label { color: var(--text-2); font-size: 13px; }
+.stat-value { font-size: 24px; font-weight: 600; margin-top: 4px; white-space: nowrap; }
+.hero .stat-value { font-size: clamp(28px, 2.6vw, 44px); line-height: 1.1; }
+.delta { font-size: 13px; margin-top: 4px; color: var(--text-2); }
+.delta .good { color: var(--up); font-weight: 600; }
+.delta .bad { color: var(--down); font-weight: 600; }
+
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid-2 .card { margin: 0; }
+.grid-2 { margin-bottom: 16px; }
+
+.legend { display: flex; gap: 16px; color: var(--text-2); font-size: 13px; margin-bottom: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.chart text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.chart .end-label { fill: var(--text-1); font-size: 12px; font-weight: 600; }
+
+.bars { display: flex; flex-direction: column; gap: 2px; }
+.bar-row {
+  display: grid; grid-template-columns: minmax(96px, 34%) 1fr; align-items: center;
+  gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: default;
+}
+.bar-row:hover, .bar-row:focus-visible { background: var(--wash); }
+.bar-label { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-track { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.bar { height: 16px; border-radius: 0 4px 4px 0; flex: none; min-width: 2px; }
+.bar-value { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-1); }
+.empty { color: var(--muted); padding: 24px 0; text-align: center; }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-weight: 600; color: var(--text-2); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+td { padding: 6px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+td.num, th.num { text-align: right; }
+td.ref { color: var(--text-2); max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+tr.warband td:first-child { font-style: italic; }
+details { margin-top: 12px; }
+details summary { color: var(--text-2); cursor: pointer; font-size: 13px; }
+details .table-wrap { margin-top: 8px; max-height: 320px; overflow-y: auto; }
+.more { margin-top: 12px; }
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+
+#tip {
+  position: fixed; z-index: 10; pointer-events: none; min-width: 140px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); font-size: 13px;
+}
+#tip .tip-title { color: var(--text-2); margin-bottom: 4px; }
+#tip .tip-row { display: flex; align-items: center; gap: 8px; }
+#tip .tip-key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+#tip .tip-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+#tip .tip-name { color: var(--text-2); }
+
+@media (max-width: 900px) {
+  .hero-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hero-row .hero { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  .grid-2 { grid-template-columns: minmax(0, 1fr); }
+  .stat-value { font-size: 20px; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Mariposa</h1>
+    <span class="meta" id="meta"></span>
+    <button type="button" id="theme">Theme</button>
+  </header>
+
+  <div class="filters">
+    <div class="segmented" role="group" aria-label="Date range" id="range"></div>
+    <select id="pocket" aria-label="Character"></select>
+  </div>
+
+  <section class="hero-row">
+    <div class="card hero">
+      <div class="stat-label" id="worth-label">Net worth</div>
+      <div class="stat-value" id="worth"></div>
+      <div class="delta" id="worth-delta"></div>
+    </div>
+    <div class="card"><div class="stat-label">Income</div><div class="stat-value" id="kpi-income"></div><div class="delta" id="kpi-income-delta"></div></div>
+    <div class="card"><div class="stat-label">Expenses</div><div class="stat-value" id="kpi-expense"></div><div class="delta" id="kpi-expense-delta"></div></div>
+    <div class="card"><div class="stat-label">Net</div><div class="stat-value" id="kpi-net"></div><div class="delta" id="kpi-net-delta"></div></div>
+    <div class="card"><div class="stat-label">Per day</div><div class="stat-value" id="kpi-day"></div><div class="delta" id="kpi-day-delta"></div></div>
+  </section>
+
+  <section class="card">
+    <h2 id="worth-title">Net worth over time</h2>
+    <p class="sub" id="worth-sub"></p>
+    <div class="chart" id="worth-chart"></div>
+    <details><summary>Show as table</summary><div class="table-wrap" id="worth-table"></div></details>
+  </section>
+
+  <section class="card">
+    <h2>Daily income and expenses</h2>
+    <p class="sub">Transfers aren't counted.</p>
+    <div class="legend">
+      <span><i class="swatch" style="background: var(--income)"></i>Income</span>
+      <span><i class="swatch" style="background: var(--expense)"></i>Expenses</span>
+    </div>
+    <div class="chart" id="daily-chart"></div>
+    <details><summary>Show as table</summary><div class="table-wrap" id="daily-table"></div></details>
+  </section>
+
+  <section class="grid-2">
+    <div class="card">
+      <h2>Income by source</h2>
+      <p class="sub" id="income-sub"></p>
+      <div class="bars" id="income-bars"></div>
+    </div>
+    <div class="card">
+      <h2>Expenses by category</h2>
+      <p class="sub" id="expense-sub"></p>
+      <div class="bars" id="expense-bars"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Characters</h2>
+    <p class="sub">Balances are current; flows are for the selected range.</p>
+    <div class="table-wrap" id="pockets-table"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div><h2>Ledger</h2><p class="sub" id="ledger-sub"></p></div>
+      <select id="ledger-cat" aria-label="Ledger category"></select>
+    </div>
+    <div class="table-wrap" id="ledger-table"></div>
+    <button type="button" class="more" id="ledger-more" hidden>Show more</button>
+  </section>
+</main>
+<div id="tip" role="status" hidden></div>
+
+<script type="application/json" id="mariposa-data">/*__MARIPOSA_DATA__*/null</script>
+<script>
+(() => {
+"use strict";
+
+const D = JSON.parse(document.getElementById("mariposa-data").textContent);
+const G = 10000;
+const NS = "http://www.w3.org/2000/svg";
+const TRANSFERS = new Set(D.transfers);
+const RANGES = [[7, "7 days"], [30, "30 days"], [90, "90 days"], ["all", "All time"]];
+const LEDGER_PAGE = 50;
+
+// ---------------------------------------------------------------------------
+// Formatting
+
+const nf = new Intl.NumberFormat("en-US");
+function gold(copper, signed = false) {
+  const abs = Math.round(Math.abs(copper));
+  const sign = abs === 0 ? "" : copper < 0 ? "−" : signed ? "+" : "";
+  // Small amounts (postage, flights) would otherwise round to 0g.
+  if (abs > 0 && abs < G) return sign + (abs >= 100 ? Math.floor(abs / 100) + "s" : abs + "c");
+  return sign + nf.format(Math.round(abs / G)) + "g";
+}
+// Two decimals so neighboring axis ticks (3.5M, 3.55M) stay distinct.
+const compactFmt = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 });
+function compact(copper) {
+  const g = Math.round(copper / G);
+  return (g < 0 ? "−" : "") + compactFmt.format(Math.abs(g));
+}
+const dayFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+const timeFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+const fmtDay = ts => dayFmt.format(new Date(ts * 1000));
+const label = cat => D.labels[cat] || cat;
+
+// ---------------------------------------------------------------------------
+// Dates (local days, DST-safe)
+
+function startOfDay(ts) {
+  const d = new Date(ts * 1000);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime() / 1000;
+}
+function addDays(dayTs, n) {
+  // Step from noon and re-snap, so a day whose midnight doesn't exist (DST
+  // starting at 00:00) can't shift every later key to 01:00.
+  const d = new Date(dayTs * 1000);
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() + n);
+  return startOfDay(d.getTime() / 1000);
+}
+
+// ---------------------------------------------------------------------------
+// State
+
+const state = { range: 30, pocket: "all", ledgerCat: "all", ledgerShown: LEDGER_PAGE };
+function loadPrefs() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("mariposa.filters") || "{}");
+    if (RANGES.some(([v]) => v === saved.range)) state.range = saved.range;
+    if (saved.pocket === "all" || D.pockets.some(p => p.key === saved.pocket)) state.pocket = saved.pocket;
+    if (saved.theme) document.documentElement.dataset.theme = saved.theme;
+  } catch (_) { /* storage unavailable */ }
+}
+function savePrefs() {
+  try {
+    localStorage.setItem("mariposa.filters", JSON.stringify({
+      range: state.range, pocket: state.pocket, theme: document.documentElement.dataset.theme,
+    }));
+  } catch (_) { /* storage unavailable */ }
+}
+
+// ---------------------------------------------------------------------------
+// Aggregation
+
+function compute() {
+  // Transactions carry server time; a PC clock running behind can stamp the
+  // newest ones after generatedAt, and the balances already include them.
+  const lastTs = D.tx.length ? D.tx[D.tx.length - 1][1] : 0;
+  const endTs = Math.max(D.generatedAt, lastTs);
+  const endDay = startOfDay(endTs);
+  const firstTs = D.tx.length ? D.tx[0][1] : endTs;
+  const startDay = state.range === "all" ? startOfDay(firstTs) : addDays(endDay, -(state.range - 1));
+  const days = [];
+  for (let d = startDay; d <= endDay; d = addDays(d, 1)) days.push(d);
+  const prevStart = addDays(startDay, -days.length);
+
+  const pocketIdx = state.pocket === "all" ? -1 : D.pockets.findIndex(p => p.key === state.pocket);
+  const inPocket = t => pocketIdx < 0 || t[0] === pocketIdx;
+  const pocketFirstTs = (D.tx.find(inPocket) || [0, endTs])[1];
+  const current = pocketIdx < 0
+    ? D.pockets.reduce((s, p) => s + p.gold, 0)
+    : D.pockets[pocketIdx].gold;
+
+  const dayIndex = new Map(days.map((d, i) => [d, i]));
+  const daily = days.map(day => ({ day, inc: 0, exp: 0, delta: 0 }));
+  const incomeCats = new Map(), expenseCats = new Map();
+  const perPocket = D.pockets.map(() => ({ inc: 0, exp: 0, xfer: 0 }));
+  const cur = { inc: 0, exp: 0 }, prev = { inc: 0, exp: 0 };
+  const ledger = [];
+
+  for (const t of D.tx) {
+    const [pi, ts, amount, cat] = t;
+    if (ts < prevStart || ts > endTs) continue;
+    const isXfer = TRANSFERS.has(cat);
+    if (ts < startDay) {
+      if (inPocket(t) && !isXfer) (amount > 0 ? prev.inc += amount : prev.exp += amount);
+      continue;
+    }
+    if (isXfer) perPocket[pi].xfer += amount;
+    else if (amount > 0) perPocket[pi].inc += amount;
+    else perPocket[pi].exp += amount;
+    if (!inPocket(t)) continue;
+
+    const di = dayIndex.get(startOfDay(ts));
+    if (di !== undefined) daily[di].delta += amount;
+    // The warband mirror of a deposit only belongs in the ledger when the
+    // warband itself is selected; otherwise the character's row already shows it.
+    if (pocketIdx >= 0 || D.pockets[pi].kind !== "warband") ledger.push(t);
+    if (isXfer) continue;
+    if (amount > 0) {
+      cur.inc += amount;
+      incomeCats.set(cat, (incomeCats.get(cat) || 0) + amount);
+      if (di !== undefined) daily[di].inc += amount;
+    } else {
+      cur.exp += amount;
+      expenseCats.set(cat, (expenseCats.get(cat) || 0) + amount);
+      if (di !== undefined) daily[di].exp += amount;
+    }
+  }
+
+  // Walk balances backwards from today's.
+  let bal = current;
+  const worth = new Array(days.length);
+  for (let i = days.length - 1; i >= 0; i--) {
+    worth[i] = bal;
+    bal -= daily[i].delta;
+  }
+
+  ledger.reverse();
+  const byAmount = (a, b) => Math.abs(b[1]) - Math.abs(a[1]);
+  return {
+    days, daily, worth, current, startBalance: bal,
+    cur, prev,
+    // Only compare against a previous period the data fully covers.
+    hasPrev: state.range !== "all" && pocketFirstTs <= prevStart,
+    incomeCats: [...incomeCats].sort(byAmount),
+    expenseCats: [...expenseCats].sort(byAmount),
+    perPocket, pocketIdx, ledger,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// DOM helpers (all data text goes through textContent)
+
+function el(tag, attrs = {}, text) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function svg(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function table(host, headers, rows, rowClass) {
+  const t = el("table");
+  const head = el("tr");
+  headers.forEach(([text, num]) => head.appendChild(el("th", num ? { class: "num" } : {}, text)));
+  t.appendChild(el("thead")).appendChild(head);
+  const body = t.appendChild(el("tbody"));
+  rows.forEach((cells, i) => {
+    const tr = body.appendChild(el("tr", rowClass ? { class: rowClass(i) } : {}));
+    cells.forEach((text, j) => {
+      const cls = [headers[j][1] ? "num" : "", headers[j][2] || ""].join(" ").trim();
+      tr.appendChild(el("td", cls ? { class: cls } : {}, text));
+    });
+  });
+  host.replaceChildren(t);
+}
+
+// ---------------------------------------------------------------------------
+// Tooltip
+
+const tip = document.getElementById("tip");
+function showTip(x, y, title, rows) {
+  tip.replaceChildren(el("div", { class: "tip-title" }, title));
+  for (const r of rows) {
+    const row = tip.appendChild(el("div", { class: "tip-row" }));
+    const key = row.appendChild(el("i", { class: "tip-key" }));
+    key.style.background = r.color || "transparent";
+    row.appendChild(el("span", { class: "tip-value" }, r.value));
+    row.appendChild(el("span", { class: "tip-name" }, r.name));
+  }
+  tip.hidden = false;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  const left = x + 14 + w > window.innerWidth - 8 ? x - 14 - w : x + 14;
+  tip.style.left = Math.max(8, left) + "px";
+  tip.style.top = Math.max(8, Math.min(y - h / 2, window.innerHeight - h - 8)) + "px";
+}
+function hideTip() { tip.hidden = true; }
+
+// ---------------------------------------------------------------------------
+// Scales
+
+function niceTicks(min, max, count = 4) {
+  if (min === max) { min -= G; max += G; }
+  const raw = (max - min) / count;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const r = raw / mag;
+  const step = (r < 1.5 ? 1 : r < 3 ? 2 : r < 7 ? 5 : 10) * mag;
+  const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step;
+  const ticks = [];
+  for (let v = lo; v <= hi + step / 2; v += step) ticks.push(v);
+  return { lo, hi, ticks };
+}
+function dateTickIndexes(n, width) {
+  const want = Math.max(2, Math.min(6, Math.floor(width / 110)));
+  if (n <= want) return [...Array(n).keys()];
+  const out = [];
+  for (let k = 0; k < want; k++) out.push(Math.round(k * (n - 1) / (want - 1)));
+  return out;
+}
+
+// Arrow keys step a focused chart's hover position, mirroring the pointer.
+function keyboardScrub(node, n, show, hide) {
+  let i = -1;
+  node.setAttribute("tabindex", "0");
+  node.addEventListener("keydown", e => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    i = i < 0 ? n - 1 : Math.max(0, Math.min(n - 1, i + (e.key === "ArrowRight" ? 1 : -1)));
+    show(i, true);
+  });
+  node.addEventListener("blur", () => { i = -1; hide(); });
+}
+
+// ---------------------------------------------------------------------------
+// Net worth line
+
+function renderWorth(host, days, values) {
+  host.replaceChildren();
+  const W = Math.max(280, host.clientWidth), H = 240;
+  const m = { l: 52, r: 64, t: 12, b: 28 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const { lo, hi, ticks } = niceTicks(Math.min(...values), Math.max(...values));
+  const x = i => m.l + (days.length === 1 ? pw / 2 : i * pw / (days.length - 1));
+  const y = v => m.t + ph - (v - lo) / (hi - lo) * ph;
+
+  const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img",
+    "aria-label": `Net worth, ${fmtDay(days[0])} to ${fmtDay(days[days.length - 1])}` }, host);
+  for (const t of ticks) {
+    svg("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: "var(--grid)", "stroke-width": 1 }, root);
+    svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, root).textContent = compact(t);
+  }
+  for (const i of dateTickIndexes(days.length, pw)) {
+    svg("text", { x: x(i), y: H - 8, "text-anchor": i === 0 ? "start" : i === days.length - 1 ? "end" : "middle" }, root)
+      .textContent = fmtDay(days[i]);
+  }
+  const d = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+  svg("path", { d, fill: "none", stroke: "var(--worth)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, root);
+  const last = values.length - 1;
+  svg("circle", { cx: x(last), cy: y(values[last]), r: 4, fill: "var(--worth)", stroke: "var(--surface)", "stroke-width": 2 }, root);
+  svg("text", { x: x(last) + 10, y: y(values[last]) + 4, class: "end-label" }, root).textContent = compact(values[last]);
+
+  const cross = svg("g", { visibility: "hidden" }, root);
+  const cline = svg("line", { y1: m.t, y2: m.t + ph, stroke: "var(--baseline)", "stroke-width": 1 }, cross);
+  const cdot = svg("circle", { r: 4, fill: "var(--worth)", stroke: "var(--surface)", "stroke-width": 2 }, cross);
+  const show = (i, fromKey, ev) => {
+    cross.setAttribute("visibility", "visible");
+    cline.setAttribute("x1", x(i)); cline.setAttribute("x2", x(i));
+    cdot.setAttribute("cx", x(i)); cdot.setAttribute("cy", y(values[i]));
+    const box = root.getBoundingClientRect(), scale = box.width / W;
+    const px = fromKey ? box.left + x(i) * scale : ev.clientX;
+    const py = fromKey ? box.top + y(values[i]) * scale : ev.clientY;
+    showTip(px, py, fmtDay(days[i]), [{ value: gold(values[i]), name: state.pocket === "all" ? "Net worth" : "Balance", color: "var(--worth)" }]);
+  };
+  const hide = () => { cross.setAttribute("visibility", "hidden"); hideTip(); };
+  const hit = svg("rect", { x: m.l, y: m.t, width: pw, height: ph, fill: "transparent" }, root);
+  hit.addEventListener("pointermove", ev => {
+    const box = root.getBoundingClientRect();
+    const px = (ev.clientX - box.left) * W / box.width;
+    const i = days.length === 1 ? 0 : Math.round((px - m.l) / pw * (days.length - 1));
+    show(Math.max(0, Math.min(days.length - 1, i)), false, ev);
+  });
+  hit.addEventListener("pointerleave", hide);
+  keyboardScrub(root, days.length, show, hide);
+}
+
+// ---------------------------------------------------------------------------
+// Daily income/expense columns (diverging around zero)
+
+function columnPath(x, y0, y1, w, r) {
+  // Rounded at the data end, square at the baseline.
+  const h = Math.abs(y1 - y0);
+  r = Math.min(r, h, w / 2);
+  if (h === 0) return "";
+  if (y1 < y0) return `M${x},${y0}V${y1 + r}A${r},${r} 0 0 1 ${x + r},${y1}H${x + w - r}A${r},${r} 0 0 1 ${x + w},${y1 + r}V${y0}Z`;
+  return `M${x},${y0}V${y1 - r}A${r},${r} 0 0 0 ${x + r},${y1}H${x + w - r}A${r},${r} 0 0 0 ${x + w},${y1 - r}V${y0}Z`;
+}
+
+function renderDaily(host, daily) {
+  host.replaceChildren();
+  if (daily.every(d => d.inc === 0 && d.exp === 0)) {
+    host.appendChild(el("div", { class: "empty" }, "No income or expenses in this range"));
+    return;
+  }
+  const W = Math.max(280, host.clientWidth), H = 240;
+  const m = { l: 52, r: 16, t: 12, b: 28 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const maxInc = Math.max(0, ...daily.map(d => d.inc));
+  const minExp = Math.min(0, ...daily.map(d => d.exp));
+  const { lo, hi, ticks } = niceTicks(minExp, maxInc);
+  const y = v => m.t + ph - (v - lo) / (hi - lo) * ph;
+  const band = pw / daily.length;
+  const bw = Math.max(1, Math.min(24, band * 0.7, band - 2));
+  const bx = i => m.l + i * band + (band - bw) / 2;
+
+  const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img",
+    "aria-label": "Daily income and expenses" }, host);
+  for (const t of ticks) {
+    svg("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: "var(--grid)", "stroke-width": 1 }, root);
+    svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, root).textContent = compact(t);
+  }
+  for (const i of dateTickIndexes(daily.length, pw)) {
+    svg("text", { x: m.l + (i + 0.5) * band, y: H - 8, "text-anchor": "middle" }, root).textContent = fmtDay(daily[i].day);
+  }
+  const wash = svg("rect", { y: m.t, height: ph, width: band, fill: "var(--wash)", visibility: "hidden" }, root);
+  const r = Math.min(4, bw / 2);
+  daily.forEach((d, i) => {
+    if (d.inc > 0) svg("path", { d: columnPath(bx(i), y(0), y(d.inc), bw, r), fill: "var(--income)" }, root);
+    if (d.exp < 0) svg("path", { d: columnPath(bx(i), y(0), y(d.exp), bw, r), fill: "var(--expense)" }, root);
+  });
+  svg("line", { x1: m.l, x2: W - m.r, y1: y(0), y2: y(0), stroke: "var(--baseline)", "stroke-width": 1 }, root);
+
+  const show = (i, fromKey, ev) => {
+    const d = daily[i];
+    wash.setAttribute("x", m.l + i * band);
+    wash.setAttribute("visibility", "visible");
+    const box = root.getBoundingClientRect(), scale = box.width / W;
+    const px = fromKey ? box.left + (m.l + (i + 0.5) * band) * scale : ev.clientX;
+    const py = fromKey ? box.top + y(0) * scale : ev.clientY;
+    showTip(px, py, fmtDay(d.day), [
+      { value: gold(d.inc, true), name: "Income", color: "var(--income)" },
+      { value: gold(d.exp, true), name: "Expenses", color: "var(--expense)" },
+      { value: gold(d.inc + d.exp, true), name: "Net" },
+    ]);
+  };
+  const hide = () => { wash.setAttribute("visibility", "hidden"); hideTip(); };
+  const hit = svg("rect", { x: m.l, y: m.t, width: pw, height: ph, fill: "transparent" }, root);
+  hit.addEventListener("pointermove", ev => {
+    const box = root.getBoundingClientRect();
+    const px = (ev.clientX - box.left) * W / box.width;
+    show(Math.max(0, Math.min(daily.length - 1, Math.floor((px - m.l) / band))), false, ev);
+  });
+  hit.addEventListener("pointerleave", hide);
+  keyboardScrub(root, daily.length, show, hide);
+}
+
+// ---------------------------------------------------------------------------
+// Category bars (HTML: label, bar, value at the tip)
+
+function renderBars(host, entries, color, total) {
+  host.replaceChildren();
+  if (!entries.length) {
+    host.appendChild(el("div", { class: "empty" }, "Nothing in this range"));
+    return;
+  }
+  const max = Math.abs(entries[0][1]);
+  for (const [cat, amount] of entries) {
+    const share = Math.round(Math.abs(amount) / Math.abs(total) * 100);
+    const row = host.appendChild(el("div", { class: "bar-row", tabindex: "0",
+      "aria-label": `${label(cat)} ${gold(amount)}, ${share}%` }));
+    row.appendChild(el("span", { class: "bar-label" }, label(cat)));
+    const track = row.appendChild(el("span", { class: "bar-track" }));
+    const bar = track.appendChild(el("span", { class: "bar" }));
+    bar.style.background = color;
+    bar.style.width = `calc((100% - 96px) * ${Math.abs(amount) / max})`;
+    track.appendChild(el("span", { class: "bar-value" }, gold(amount)));
+    const tipRows = [{ value: gold(amount), name: `${share}% of total`, color }];
+    row.addEventListener("pointermove", ev => showTip(ev.clientX, ev.clientY, label(cat), tipRows));
+    row.addEventListener("pointerleave", hideTip);
+    row.addEventListener("focus", () => {
+      const b = row.getBoundingClientRect();
+      showTip(b.right - 120, b.top + b.height / 2, label(cat), tipRows);
+    });
+    row.addEventListener("blur", hideTip);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Delta line under a stat: "▲ 12% vs previous 30 days"
+
+function setDelta(node, curValue, prevValue, upIsGood) {
+  node.replaceChildren();
+  if (!model.hasPrev) {
+    node.textContent = state.range === "all" ? " " : "Not enough history to compare";
+    return;
+  }
+  const diff = curValue - prevValue;
+  const up = diff > 0;
+  const good = diff === 0 ? null : up === upIsGood;
+  const amount = prevValue === 0 ? "from 0" : `${Math.abs(Math.round(diff / Math.abs(prevValue) * 100))}%`;
+  const mark = el("span", good === null ? {} : { class: good ? "good" : "bad" },
+    `${diff === 0 ? "→" : up ? "▲" : "▼"} ${diff === 0 ? "0%" : amount}`);
+  node.append(mark, ` vs previous ${state.range} days`);
+}
+
+// ---------------------------------------------------------------------------
+// Render
+
+let model;
+
+function renderControls() {
+  const range = document.getElementById("range");
+  range.replaceChildren();
+  for (const [value, text] of RANGES) {
+    const b = range.appendChild(el("button", { type: "button", "aria-pressed": String(state.range === value) }, text));
+    b.addEventListener("click", () => { state.range = value; state.ledgerShown = LEDGER_PAGE; update(); });
+  }
+  const select = document.getElementById("pocket");
+  if (!select.options.length) {
+    select.appendChild(el("option", { value: "all" }, "All characters"));
+    for (const p of D.pockets) {
+      select.appendChild(el("option", { value: p.key }, p.realm ? `${p.name} – ${p.realm}` : p.name));
+    }
+    select.addEventListener("change", () => { state.pocket = select.value; state.ledgerShown = LEDGER_PAGE; update(); });
+  }
+  select.value = state.pocket;
+}
+
+function renderCharts() {
+  renderWorth(document.getElementById("worth-chart"), model.days, model.worth);
+  renderDaily(document.getElementById("daily-chart"), model.daily);
+}
+
+function update() {
+  savePrefs();
+  renderControls();
+  model = compute();
+  const { cur, prev } = model;
+  const ndays = model.days.length;
+
+  const single = model.pocketIdx >= 0;
+  document.getElementById("worth-label").textContent = single ? "Balance" : "Net worth";
+  document.getElementById("worth-title").textContent = single ? "Balance over time" : "Net worth over time";
+  document.getElementById("worth-sub").textContent = single
+    ? "Balance at the end of each day, including transfers to and from your other characters."
+    : "Balance at the end of each day. Transfers between your own characters don't change the total.";
+  document.getElementById("worth").textContent = gold(model.current);
+  const change = model.current - model.startBalance;
+  const wd = document.getElementById("worth-delta");
+  wd.replaceChildren(
+    el("span", change === 0 ? {} : { class: change > 0 ? "good" : "bad" },
+      `${change > 0 ? "▲" : change < 0 ? "▼" : "→"} ${gold(change, true)}`),
+    state.range === "all" ? " all time" : ` over ${state.range} days`);
+
+  document.getElementById("kpi-income").textContent = gold(cur.inc);
+  document.getElementById("kpi-expense").textContent = gold(cur.exp);
+  document.getElementById("kpi-net").textContent = gold(cur.inc + cur.exp, true);
+  document.getElementById("kpi-day").textContent = gold((cur.inc + cur.exp) / ndays, true);
+  setDelta(document.getElementById("kpi-income-delta"), cur.inc, prev.inc, true);
+  setDelta(document.getElementById("kpi-expense-delta"), -cur.exp, -prev.exp, false);
+  setDelta(document.getElementById("kpi-net-delta"), cur.inc + cur.exp, prev.inc + prev.exp, true);
+  document.getElementById("kpi-day-delta").textContent = `average over ${ndays} day${ndays === 1 ? "" : "s"}`;
+
+  renderCharts();
+  table(document.getElementById("worth-table"), [["Date"], ["Net worth", true]],
+    model.days.map((d, i) => [fmtDay(d), gold(model.worth[i])]).reverse());
+  table(document.getElementById("daily-table"), [["Date"], ["Income", true], ["Expenses", true], ["Net", true]],
+    model.daily.map(d => [fmtDay(d.day), gold(d.inc, true), gold(d.exp, true), gold(d.inc + d.exp, true)]).reverse());
+
+  document.getElementById("income-sub").textContent = `${gold(cur.inc)} total`;
+  document.getElementById("expense-sub").textContent = `${gold(cur.exp)} total`;
+  renderBars(document.getElementById("income-bars"), model.incomeCats, "var(--income)", cur.inc);
+  renderBars(document.getElementById("expense-bars"), model.expenseCats, "var(--expense)", cur.exp);
+
+  const pocketRows = D.pockets
+    .map((p, i) => ({ p, f: model.perPocket[i] }))
+    .filter(({ p }) => model.pocketIdx < 0 || p.key === state.pocket);
+  table(document.getElementById("pockets-table"),
+    [["Name"], ["Realm"], ["Balance", true], ["Income", true], ["Expenses", true], ["Transfers", true], ["Net", true]],
+    pocketRows.map(({ p, f }) => [p.name, p.realm, gold(p.gold), gold(f.inc, true), gold(f.exp, true),
+      gold(f.xfer, true), gold(f.inc + f.exp, true)]),
+    i => pocketRows[i].p.kind === "warband" ? "warband" : "");
+
+  renderLedger();
+}
+
+// The ledger re-renders on its own, so paging doesn't recompute everything.
+function renderLedger() {
+  const catSelect = document.getElementById("ledger-cat");
+  const cats = [...new Set(model.ledger.map(t => t[3]))].sort((a, b) => label(a).localeCompare(label(b)));
+  if (state.ledgerCat !== "all" && !cats.includes(state.ledgerCat)) state.ledgerCat = "all";
+  catSelect.replaceChildren(el("option", { value: "all" }, "All categories"),
+    ...cats.map(c => el("option", { value: c }, label(c))));
+  catSelect.value = state.ledgerCat;
+  const rows = state.ledgerCat === "all" ? model.ledger : model.ledger.filter(t => t[3] === state.ledgerCat);
+  const shown = rows.slice(0, state.ledgerShown);
+  document.getElementById("ledger-sub").textContent =
+    `${nf.format(rows.length)} transactions in range, newest first`;
+  table(document.getElementById("ledger-table"),
+    [["Time"], ["Character"], ["Category"], ["Amount", true], ["Detail", false, "ref"]],
+    shown.map(([pi, ts, amount, cat, ref]) => [timeFmt.format(new Date(ts * 1000)), D.pockets[pi].name,
+      label(cat) + (TRANSFERS.has(cat) ? " (transfer)" : ""), gold(amount, true), ref == null ? "" : String(ref)]));
+  document.getElementById("ledger-more").hidden = shown.length >= rows.length;
+}
+
+document.getElementById("ledger-cat").addEventListener("change", e => {
+  state.ledgerCat = e.target.value;
+  state.ledgerShown = LEDGER_PAGE;
+  renderLedger();
+});
+
+document.getElementById("ledger-more").addEventListener("click", () => {
+  state.ledgerShown += LEDGER_PAGE;
+  renderLedger();
+});
+document.getElementById("theme").addEventListener("click", () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+  savePrefs();
+});
+
+const pocketCount = D.pockets.filter(p => p.kind === "character").length;
+document.getElementById("meta").textContent =
+  `${pocketCount} character${pocketCount === 1 ? "" : "s"} · updated ${timeFmt.format(new Date(D.generatedAt * 1000))}`;
+
+loadPrefs();
+update();
+// Redraw charts only when their width changes, not when the page grows.
+const chartHost = document.getElementById("worth-chart");
+let resizeTimer, lastWidth = chartHost.clientWidth;
+new ResizeObserver(entries => {
+  const width = Math.round(entries[0].contentRect.width);
+  if (width === lastWidth) return;
+  lastWidth = width;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => model && renderCharts(), 100);
+}).observe(chartHost);
+})();
+</script>
+</body>
+</html>

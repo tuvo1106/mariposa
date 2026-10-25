@@ -26,6 +26,16 @@ In game, `/mp help` lists the commands. After you `/reload` or log out, import t
 ```bash
 python3 companion/mariposa.py --summary 7          # writes mariposa.db
 python3 companion/mariposa.py --csv ledger.csv     # also export CSV
+python3 companion/mariposa.py --dashboard dashboard.html   # offline dashboard; open in a browser
+```
+
+To work on the dashboard without playing, generate synthetic data (written to the
+gitignored `synthetic/` folder):
+
+```bash
+python3 companion/synth.py
+python3 companion/mariposa.py --wtf synthetic/WTF --db synthetic/mariposa.db \
+  --dashboard synthetic/dashboard.html
 ```
 
 If the addon shows as out of date, check your client's interface number with

@@ -60,10 +60,26 @@ for idempotent imports. Categories are defined in `Mariposa/Categories.lua`.
 license), parses it with a small SavedVariables-subset Lua parser, and upserts it into
 SQLite (`characters`, `transactions`, `warband`). Dashboards read the SQLite file.
 
+## Dashboard
+
+`--dashboard` writes one self-contained HTML file: the data is embedded as JSON and the
+charts are hand-built SVG, so it opens offline with no server
+([ADR-0004](docs/adr/0004-static-html-dashboard.md)). It shows net worth, income, expenses,
+net and per-day averages against the previous period, a net-worth line, daily income and
+expense columns, breakdowns by category, a per-character table, and the ledger. Everything
+can be filtered by date range and character.
+
+The warband bank is treated as its own **pocket**, alongside the characters. Deposits are
+only recorded on the character side, so `dashboard.py` mirrors each one onto the warband.
+Transfers then net to zero across all pockets, and any pocket's balance history is its
+current balance minus later transactions.
+
+`companion/synth.py` generates a realistic synthetic `Mariposa.lua` for development.
+
 ## Roadmap
 
 1. **Ledger MVP** (done): attribution, multi-character storage, `/mp` summaries, importer.
-2. **Dashboard**: Streamlit or a static page over `mariposa.db`.
+2. **Dashboard** (done): static offline HTML over `mariposa.db`, plus synthetic data.
 3. **Transfers & net worth polish**: trade-with-alt detection, net-worth history.
 4. **In-game UI**: LibDataBroker button, ledger window with re-categorizing, goals.
 5. **Retention**: roll old transactions into daily totals to bound SavedVariables size.

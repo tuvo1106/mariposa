@@ -10,3 +10,8 @@ credentials/
 *.db
 *.csv
 __pycache__/
+
+# Local notes
+docs/TESTING.md
+synthetic/
+dashboard.html

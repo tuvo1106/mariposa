@@ -15,6 +15,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Addon: `/mp` commands for session, today, last 7 days, net worth by character, and the
   recent ledger.
 - Companion: `companion/mariposa.py` imports SavedVariables into SQLite and CSV.
+- Companion: `--dashboard` writes an offline HTML dashboard covering net worth, income
+  and expenses, category breakdowns, characters, the warband bank, and a filterable ledger.
+- Companion: `companion/synth.py` generates synthetic data for development.
 
 ### Changed
 
