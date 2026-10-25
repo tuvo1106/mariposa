@@ -38,6 +38,12 @@ class LuaParserTest(unittest.TestCase):
             self.parse("A = {\n @ }")
 
 
+class CategoriesTest(unittest.TestCase):
+    def test_read_from_addon(self):
+        self.assertEqual(mariposa.CATEGORIES["world_quest"]["label"], "World Quests")
+        self.assertEqual(mariposa.TRANSFER_CATEGORIES, {"xfer_warband", "xfer_mail"})
+
+
 class ImportTest(unittest.TestCase):
     def setUp(self):
         self.conn = sqlite3.connect(":memory:")

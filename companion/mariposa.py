@@ -55,8 +55,6 @@ CREATE TABLE IF NOT EXISTS warband (
 );
 """
 
-# Mirrors the `transfer = true` flags in Mariposa/Categories.lua.
-TRANSFER_CATEGORIES = {"xfer_warband", "xfer_mail"}
 
 
 class LuaParseError(ValueError):
@@ -209,6 +207,22 @@ class LuaParser:
         return items
 
 
+CATEGORIES_LUA = Path(__file__).resolve().parent.parent / "Mariposa" / "Categories.lua"
+
+
+def load_categories(path: Path = CATEGORIES_LUA) -> dict:
+    """Read `ns.Categories` from the addon, so it stays the one place categories
+    are defined: {key: {"label": ..., "transfer": True?}}."""
+    text = path.read_text(encoding="latin-1")
+    parser = LuaParser(text)
+    parser.i = text.index("{", text.index("ns.Categories ="))
+    return parser._value()
+
+
+CATEGORIES = load_categories()
+TRANSFER_CATEGORIES = {k for k, v in CATEGORIES.items() if v.get("transfer")}
+
+
 def parse_saved_variables(path: Path) -> dict:
     return LuaParser(path.read_text(encoding="latin-1")).parse()
 
@@ -312,7 +326,7 @@ def main(argv: list[str] | None = None) -> int:
         print_summary(conn, args.summary)
     if args.dashboard:
         from dashboard import render_dashboard
-        render_dashboard(conn, args.dashboard, TRANSFER_CATEGORIES)
+        render_dashboard(conn, args.dashboard, CATEGORIES)
         print(f"wrote {args.dashboard}")
     return 0
 

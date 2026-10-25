@@ -42,8 +42,9 @@ FRIENDS = ["Kaelynn-Area52", "Morrow-Area52", "Pippa-Stormrage"]
 class World:
     """Generates events in time order and keeps every balance non-negative."""
 
-    def __init__(self, rng: random.Random):
+    def __init__(self, rng: random.Random, end: int):
         self.rng = rng
+        self.end = end
         self.gold = {c[0]: c[6] * G + rng.randrange(G) for c in CHARACTERS}
         self.start_gold = dict(self.gold)
         self.warband = WARBAND_START * G
@@ -53,6 +54,8 @@ class World:
         return int(self.rng.uniform(lo, hi) * G) + self.rng.randrange(100)
 
     def add(self, char: str, t: int, amount: int, cat: str, ref=None, zone: int | None = None) -> bool:
+        if t > self.end:
+            return False
         if amount < 0 and self.gold[char] + amount < 0:
             return False
         if cat == "xfer_warband" and self.warband - amount < 0:
@@ -91,10 +94,12 @@ def play_session(w: World, char: str, profile: str, t: int) -> int:
         if rng.random() < 0.25:
             w.add(char, step(), -w.copper(0.3, 0.3), "postage")
         if rng.random() < 0.12:
+            # Both legs share a timestamp, so neither can fall past --end alone
+            # and the alt never spends gold before it arrives.
             target = rng.choice(["Brannoc-Area52", "Thistle-Area52"])
             amount = w.copper(10_000, 60_000)
             if w.add(char, step(), -amount, "xfer_mail", target):
-                w.add(target, t + rng.randint(600, 7200), amount, "xfer_mail", char.split("-")[0])
+                w.add(target, t, amount, "xfer_mail", char.split("-")[0])
         if rng.random() < 0.1:
             w.add(char, step(), -w.copper(50_000, 250_000), "xfer_warband")
         return t
@@ -139,7 +144,7 @@ def play_session(w: World, char: str, profile: str, t: int) -> int:
 
 def generate(days: int, seed: int, end: int) -> dict:
     rng = random.Random(seed)
-    w = World(rng)
+    w = World(rng, end)
     first_day = end - end % DAY - (days - 1) * DAY
     for d in range(days):
         day = first_day + d * DAY
@@ -155,11 +160,10 @@ def generate(days: int, seed: int, end: int) -> dict:
     thistle = w.events["Thistle-Area52"]
     if thistle:
         w.add("Thistle-Area52", thistle[len(thistle) // 2]["t"] + 1, 1_234 * G, "adjustment")
-        thistle.sort(key=lambda tx: tx["t"])
 
     chars = {}
     for key, name, realm, cls, faction, level, *_ in CHARACTERS:
-        txs = [tx for tx in sorted(w.events[key], key=lambda tx: tx["t"]) if tx["t"] <= end]
+        txs = sorted(w.events[key], key=lambda tx: tx["t"])
         for seq, tx in enumerate(txs, 1):
             tx["s"] = seq
         chars[key] = {

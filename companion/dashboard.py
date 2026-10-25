@@ -4,26 +4,14 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from collections import Counter
 from pathlib import Path
 
 TEMPLATE = Path(__file__).with_name("dashboard_template.html")
 PLACEHOLDER = "/*__MARIPOSA_DATA__*/null"
 
-# Mirrors the labels in Mariposa/Categories.lua.
-CATEGORY_LABELS = {
-    "quest": "Quests", "world_quest": "World Quests", "bonus": "Bonus Objectives",
-    "loot": "Loot", "vendor_sell": "Vendor Sales", "vendor_buy": "Vendor Purchases",
-    "repair": "Repairs", "ah_sale": "AH Sales", "ah_buy": "AH Purchases",
-    "ah_deposit": "AH Deposits", "ah_refund": "AH Refunds", "mail_in": "Mail Received",
-    "mail_out": "Mail Sent", "postage": "Postage", "cod": "COD Payments",
-    "trade_in": "Trade Received", "trade_out": "Trade Given", "flight": "Flight Paths",
-    "transmog": "Transmog", "barber": "Barber", "training": "Training",
-    "guild_bank": "Guild Bank", "xfer_warband": "Warband Bank", "xfer_mail": "Mail to Alts",
-    "adjustment": "Untracked Change", "other": "Other",
-}
 
-
-def dashboard_data(conn: sqlite3.Connection, transfer_categories: set[str]) -> dict:
+def dashboard_data(conn: sqlite3.Connection, categories: dict) -> dict:
     """Everything the page needs, as "pockets" (characters plus one warband bank
     per account) and transactions against them.
 
@@ -32,11 +20,17 @@ def dashboard_data(conn: sqlite3.Connection, transfer_categories: set[str]) -> d
     pockets, and any pocket's balance history is its current balance minus
     later transactions.
     """
+    chars = conn.execute(
+        "SELECT char_key, account, name, realm, class, gold FROM characters ORDER BY gold DESC").fetchall()
+    # Same-named characters on different realms get the realm in their label.
+    name_counts = Counter(name or key for key, _, name, *_ in chars)
     pockets, index = [], {}
-    for key, account, name, realm, cls, gold in conn.execute(
-            "SELECT char_key, account, name, realm, class, gold FROM characters ORDER BY gold DESC"):
+    for key, account, name, realm, cls, gold in chars:
+        label = name or key
+        if name_counts[label] > 1 and realm:
+            label = f"{label} ({realm})"
         index[key] = len(pockets)
-        pockets.append({"kind": "character", "key": key, "account": account, "name": name or key,
+        pockets.append({"kind": "character", "key": key, "account": account, "name": label,
                         "realm": realm or "", "cls": cls, "gold": gold or 0})
 
     warbands = conn.execute("SELECT account, gold FROM warband ORDER BY account").fetchall()
@@ -60,13 +54,13 @@ def dashboard_data(conn: sqlite3.Connection, transfer_categories: set[str]) -> d
         "generatedAt": int(time.time()),
         "pockets": pockets,
         "tx": tx,
-        "labels": CATEGORY_LABELS,
-        "transfers": sorted(transfer_categories),
+        "labels": {k: v["label"] for k, v in categories.items()},
+        "transfers": sorted(k for k, v in categories.items() if v.get("transfer")),
     }
 
 
-def render_dashboard(conn: sqlite3.Connection, out: Path, transfer_categories: set[str]) -> None:
-    data = json.dumps(dashboard_data(conn, transfer_categories), separators=(",", ":"))
+def render_dashboard(conn: sqlite3.Connection, out: Path, categories: dict) -> None:
+    data = json.dumps(dashboard_data(conn, categories), separators=(",", ":"))
     # The JSON sits in a <script> block; escape "<" so a ref like "</script>"
     # can't end it early.
     data = data.replace("<", "\\u003c")

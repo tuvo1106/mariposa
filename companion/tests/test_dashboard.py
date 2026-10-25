@@ -25,7 +25,7 @@ class SyntheticPipelineTest(unittest.TestCase):
         cls.conn.executescript(mariposa.SCHEMA)
         [(account, path)] = mariposa.find_saved_variables(wtf)
         cls.imported = mariposa.import_db(cls.conn, account, mariposa.parse_saved_variables(path))
-        cls.data = dashboard.dashboard_data(cls.conn, mariposa.TRANSFER_CATEGORIES)
+        cls.data = dashboard.dashboard_data(cls.conn, mariposa.CATEGORIES)
 
     @classmethod
     def tearDownClass(cls):
@@ -54,11 +54,29 @@ class SyntheticPipelineTest(unittest.TestCase):
         # Starting balances include a random silver/copper remainder per character.
         self.assertAlmostEqual(start / synth.G, expected, delta=len(synth.CHARACTERS))
 
+    def test_transfers_net_to_zero_whatever_the_end_time(self):
+        # Regression: the receiving leg of an alt mail could land after --end.
+        for seed in range(4):
+            for hour in range(0, 24, 3):
+                db = synth.generate(days=10, seed=seed, end=END - END % 86400 + hour * 3600)
+                net = sum(tx["a"] for c in db["chars"].values() for tx in c["tx"] if tx["k"] == "xfer_mail")
+                self.assertEqual(net, 0, (seed, hour))
+
+    def test_same_names_on_different_realms_are_distinguished(self):
+        conn = sqlite3.connect(":memory:")
+        self.conn.backup(conn)
+        conn.execute("UPDATE characters SET name = 'Twin' WHERE char_key IN ('Aurelia-Area52', 'Vexis-Stormrage')")
+        names = {p["key"]: p["name"] for p in dashboard.dashboard_data(conn, mariposa.CATEGORIES)["pockets"]}
+        self.assertEqual(names["Aurelia-Area52"], "Twin (Area 52)")
+        self.assertEqual(names["Vexis-Stormrage"], "Twin (Stormrage)")
+
     def test_render_escapes_script_breakout(self):
-        self.conn.execute("UPDATE transactions SET ref = '</script><b>x' WHERE rowid = 1")
+        conn = sqlite3.connect(":memory:")
+        self.conn.backup(conn)
+        conn.execute("UPDATE transactions SET ref = '</script><b>x' WHERE rowid = 1")
         with tempfile.TemporaryDirectory() as d:
             out = Path(d) / "dash.html"
-            dashboard.render_dashboard(self.conn, out, mariposa.TRANSFER_CATEGORIES)
+            dashboard.render_dashboard(conn, out, mariposa.CATEGORIES)
             html = out.read_text(encoding="utf-8")
         self.assertNotIn(dashboard.PLACEHOLDER, html)
         self.assertNotIn("</script><b>", html)

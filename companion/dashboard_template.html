@@ -262,13 +262,11 @@ function gold(copper, signed = false) {
   if (abs > 0 && abs < G) return sign + (abs >= 100 ? Math.floor(abs / 100) + "s" : abs + "c");
   return sign + nf.format(Math.round(abs / G)) + "g";
 }
+// Two decimals so neighboring axis ticks (3.5M, 3.55M) stay distinct.
+const compactFmt = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 });
 function compact(copper) {
-  const g = Math.abs(copper) / G;
-  let text;
-  if (g >= 1e6) text = (g / 1e6).toFixed(g >= 1e7 ? 0 : 1) + "M";
-  else if (g >= 1e3) text = (g / 1e3).toFixed(g >= 1e4 ? 0 : 1) + "K";
-  else text = String(Math.round(g));
-  return (copper < 0 ? "−" : "") + text.replace(".0", "");
+  const g = Math.round(copper / G);
+  return (g < 0 ? "−" : "") + compactFmt.format(Math.abs(g));
 }
 const dayFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 const timeFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -284,9 +282,12 @@ function startOfDay(ts) {
   return d.getTime() / 1000;
 }
 function addDays(dayTs, n) {
+  // Step from noon and re-snap, so a day whose midnight doesn't exist (DST
+  // starting at 00:00) can't shift every later key to 01:00.
   const d = new Date(dayTs * 1000);
+  d.setHours(12, 0, 0, 0);
   d.setDate(d.getDate() + n);
-  return d.getTime() / 1000;
+  return startOfDay(d.getTime() / 1000);
 }
 
 // ---------------------------------------------------------------------------
@@ -313,7 +314,10 @@ function savePrefs() {
 // Aggregation
 
 function compute() {
-  const endTs = D.generatedAt;
+  // Transactions carry server time; a PC clock running behind can stamp the
+  // newest ones after generatedAt, and the balances already include them.
+  const lastTs = D.tx.length ? D.tx[D.tx.length - 1][1] : 0;
+  const endTs = Math.max(D.generatedAt, lastTs);
   const endDay = startOfDay(endTs);
   const firstTs = D.tx.length ? D.tx[0][1] : endTs;
   const startDay = state.range === "all" ? startOfDay(firstTs) : addDays(endDay, -(state.range - 1));
@@ -323,6 +327,7 @@ function compute() {
 
   const pocketIdx = state.pocket === "all" ? -1 : D.pockets.findIndex(p => p.key === state.pocket);
   const inPocket = t => pocketIdx < 0 || t[0] === pocketIdx;
+  const pocketFirstTs = (D.tx.find(inPocket) || [0, endTs])[1];
   const current = pocketIdx < 0
     ? D.pockets.reduce((s, p) => s + p.gold, 0)
     : D.pockets[pocketIdx].gold;
@@ -378,7 +383,7 @@ function compute() {
     days, daily, worth, current, startBalance: bal,
     cur, prev,
     // Only compare against a previous period the data fully covers.
-    hasPrev: state.range !== "all" && firstTs <= prevStart,
+    hasPrev: state.range !== "all" && pocketFirstTs <= prevStart,
     incomeCats: [...incomeCats].sort(byAmount),
     expenseCats: [...expenseCats].sort(byAmount),
     perPocket, pocketIdx, ledger,
@@ -630,15 +635,16 @@ function renderBars(host, entries, color, total) {
 
 function setDelta(node, curValue, prevValue, upIsGood) {
   node.replaceChildren();
-  if (!model.hasPrev || prevValue === 0) {
+  if (!model.hasPrev) {
     node.textContent = state.range === "all" ? " " : "Not enough history to compare";
     return;
   }
-  const pct = Math.round((curValue - prevValue) / Math.abs(prevValue) * 100);
-  const up = pct > 0;
-  const good = pct === 0 ? null : up === upIsGood;
+  const diff = curValue - prevValue;
+  const up = diff > 0;
+  const good = diff === 0 ? null : up === upIsGood;
+  const amount = prevValue === 0 ? "from 0" : `${Math.abs(Math.round(diff / Math.abs(prevValue) * 100))}%`;
   const mark = el("span", good === null ? {} : { class: good ? "good" : "bad" },
-    `${pct === 0 ? "→" : up ? "▲" : "▼"} ${Math.abs(pct)}%`);
+    `${diff === 0 ? "→" : up ? "▲" : "▼"} ${diff === 0 ? "0%" : amount}`);
   node.append(mark, ` vs previous ${state.range} days`);
 }
 
@@ -720,6 +726,11 @@ function update() {
       gold(f.xfer, true), gold(f.inc + f.exp, true)]),
     i => pocketRows[i].p.kind === "warband" ? "warband" : "");
 
+  renderLedger();
+}
+
+// The ledger re-renders on its own, so paging doesn't recompute everything.
+function renderLedger() {
   const catSelect = document.getElementById("ledger-cat");
   const cats = [...new Set(model.ledger.map(t => t[3]))].sort((a, b) => label(a).localeCompare(label(b)));
   if (state.ledgerCat !== "all" && !cats.includes(state.ledgerCat)) state.ledgerCat = "all";
@@ -740,12 +751,12 @@ function update() {
 document.getElementById("ledger-cat").addEventListener("change", e => {
   state.ledgerCat = e.target.value;
   state.ledgerShown = LEDGER_PAGE;
-  update();
+  renderLedger();
 });
 
 document.getElementById("ledger-more").addEventListener("click", () => {
   state.ledgerShown += LEDGER_PAGE;
-  update();
+  renderLedger();
 });
 document.getElementById("theme").addEventListener("click", () => {
   const root = document.documentElement;
@@ -760,11 +771,16 @@ document.getElementById("meta").textContent =
 
 loadPrefs();
 update();
-let resizeTimer;
-new ResizeObserver(() => {
+// Redraw charts only when their width changes, not when the page grows.
+const chartHost = document.getElementById("worth-chart");
+let resizeTimer, lastWidth = chartHost.clientWidth;
+new ResizeObserver(entries => {
+  const width = Math.round(entries[0].contentRect.width);
+  if (width === lastWidth) return;
+  lastWidth = width;
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => model && renderCharts(), 100);
-}).observe(document.querySelector("main"));
+}).observe(chartHost);
 })();
 </script>
 </body>
