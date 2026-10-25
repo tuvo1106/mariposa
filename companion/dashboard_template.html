@@ -302,7 +302,7 @@ details .table-wrap { margin-top: 8px; max-height: 320px; overflow-y: auto; }
             <details><summary>Show as table</summary><div class="table-wrap" id="worth-table"></div></details>
           </div>
           <div class="panel">
-            <h3>Daily income and expenses</h3>
+            <h3 id="daily-title">Daily income and expenses</h3>
             <p class="sub">Transfers aren't counted.</p>
             <div class="legend">
               <span><i class="swatch" style="background: var(--income)"></i>Income</span>
@@ -363,7 +363,7 @@ const D = JSON.parse(document.getElementById("mariposa-data").textContent);
 const G = 10000;
 const NS = "http://www.w3.org/2000/svg";
 const TRANSFERS = new Set(D.transfers);
-const RANGES = [[7, "7 days"], [30, "30 days"], [90, "90 days"], ["all", "All time"]];
+const RANGES = [[1, "1 day"], [7, "7 days"], [30, "30 days"], [90, "90 days"], ["all", "All time"]];
 const LEDGER_PAGE = 50;
 
 // ---------------------------------------------------------------------------
@@ -411,6 +411,16 @@ function compact(copper) {
 const dayFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 const timeFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 const fmtDay = ts => dayFmt.format(new Date(ts * 1000));
+const hourFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric" });
+const fmtHour = ts => hourFmt.format(new Date(ts * 1000));
+
+// Short axis labels, or full amounts when the short ones would repeat
+// (a narrow range like 3,764,100g..3,764,600g all reads "3.76M").
+function axisLabels(ticks) {
+  const short = ticks.map(compact);
+  return new Set(short).size === short.length ? short : ticks.map(t => gold(t));
+}
+const axisMargin = labels => Math.max(52, 14 + 6.5 * Math.max(...labels.map(l => l.length)));
 const label = cat => D.labels[cat] || cat;
 
 // ---------------------------------------------------------------------------
@@ -461,9 +471,22 @@ function compute() {
   const endDay = startOfDay(endTs);
   const firstTs = D.tx.length ? D.tx[0][1] : endTs;
   const startDay = state.range === "all" ? startOfDay(firstTs) : addDays(endDay, -(state.range - 1));
-  const days = [];
-  for (let d = startDay; d <= endDay; d = addDays(d, 1)) days.push(d);
-  const prevStart = addDays(startDay, -days.length);
+  // One day is bucketed by hour, longer ranges by day.
+  const hourly = state.range === 1;
+  const starts = [];
+  if (hourly) {
+    for (let h = 0; h < 24; h++) {
+      const d = new Date(startDay * 1000);
+      d.setHours(h, 0, 0, 0);
+      const t = d.getTime() / 1000;
+      if (t > endTs) break;
+      if (t !== starts[starts.length - 1]) starts.push(t);  // DST can repeat an hour
+    }
+  } else {
+    for (let d = startDay; d <= endDay; d = addDays(d, 1)) starts.push(d);
+  }
+  const ndays = hourly ? 1 : starts.length;
+  const prevStart = addDays(startDay, -ndays);
 
   const pocketIdx = state.pocket === "all" ? -1 : D.pockets.findIndex(p => p.key === state.pocket);
   const inPocket = t => pocketIdx < 0 || t[0] === pocketIdx;
@@ -472,8 +495,15 @@ function compute() {
     ? D.pockets.reduce((s, p) => s + p.gold, 0)
     : D.pockets[pocketIdx].gold;
 
-  const dayIndex = new Map(days.map((d, i) => [d, i]));
-  const daily = days.map(day => ({ day, inc: 0, exp: 0, delta: 0 }));
+  const dayIndex = new Map(starts.map((d, i) => [d, i]));
+  const bucketOf = hourly
+    ? ts => { let i = starts.length - 1; while (i > 0 && starts[i] > ts) i--; return i; }
+    : ts => dayIndex.get(startOfDay(ts));
+  const daily = starts.map(start => ({
+    start, inc: 0, exp: 0, delta: 0,
+    label: hourly ? fmtHour(start) : fmtDay(start),
+    tip: hourly ? `${fmtDay(start)}, ${fmtHour(start)}` : fmtDay(start),
+  }));
   const incomeCats = new Map(), expenseCats = new Map();
   const perPocket = D.pockets.map(() => ({ inc: 0, exp: 0, xfer: 0 }));
   const cur = { inc: 0, exp: 0 }, prev = { inc: 0, exp: 0 };
@@ -492,7 +522,7 @@ function compute() {
     else perPocket[pi].exp += amount;
     if (!inPocket(t)) continue;
 
-    const di = dayIndex.get(startOfDay(ts));
+    const di = bucketOf(ts);
     if (di !== undefined) daily[di].delta += amount;
     // The warband mirror of a deposit only belongs in the ledger when the
     // warband itself is selected; otherwise the character's row already shows it.
@@ -511,8 +541,8 @@ function compute() {
 
   // Walk balances backwards from today's.
   let bal = current;
-  const worth = new Array(days.length);
-  for (let i = days.length - 1; i >= 0; i--) {
+  const worth = new Array(daily.length);
+  for (let i = daily.length - 1; i >= 0; i--) {
     worth[i] = bal;
     bal -= daily[i].delta;
   }
@@ -520,7 +550,7 @@ function compute() {
   ledger.reverse();
   const byAmount = (a, b) => Math.abs(b[1]) - Math.abs(a[1]);
   return {
-    days, daily, worth, current, startBalance: bal,
+    daily, hourly, ndays, worth, current, startBalance: bal,
     cur, prev,
     // Only compare against a previous period the data fully covers.
     hasPrev: state.range !== "all" && pocketFirstTs <= prevStart,
@@ -621,24 +651,26 @@ function keyboardScrub(node, n, show, hide) {
 // ---------------------------------------------------------------------------
 // Net worth line
 
-function renderWorth(host, days, values) {
+function renderWorth(host, buckets, values) {
   host.replaceChildren();
-  const W = Math.max(280, host.clientWidth), H = 240;
-  const m = { l: 52, r: 64, t: 12, b: 28 };
-  const pw = W - m.l - m.r, ph = H - m.t - m.b;
   const { lo, hi, ticks } = niceTicks(Math.min(...values), Math.max(...values));
-  const x = i => m.l + (days.length === 1 ? pw / 2 : i * pw / (days.length - 1));
+  const yLabels = axisLabels(ticks);
+  const W = Math.max(280, host.clientWidth), H = 240;
+  const m = { l: axisMargin(yLabels), r: 64, t: 12, b: 28 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const n = buckets.length;
+  const x = i => m.l + (n === 1 ? pw / 2 : i * pw / (n - 1));
   const y = v => m.t + ph - (v - lo) / (hi - lo) * ph;
 
   const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img",
-    "aria-label": `Net worth, ${fmtDay(days[0])} to ${fmtDay(days[days.length - 1])}` }, host);
-  for (const t of ticks) {
+    "aria-label": `Net worth, ${buckets[0].tip} to ${buckets[n - 1].tip}` }, host);
+  ticks.forEach((t, k) => {
     svg("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: "var(--grid)", "stroke-width": 1 }, root);
-    svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, root).textContent = compact(t);
-  }
-  for (const i of dateTickIndexes(days.length, pw)) {
-    svg("text", { x: x(i), y: H - 8, "text-anchor": i === 0 ? "start" : i === days.length - 1 ? "end" : "middle" }, root)
-      .textContent = fmtDay(days[i]);
+    svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, root).textContent = yLabels[k];
+  });
+  for (const i of dateTickIndexes(n, pw)) {
+    svg("text", { x: x(i), y: H - 8, "text-anchor": i === 0 ? "start" : i === n - 1 ? "end" : "middle" }, root)
+      .textContent = buckets[i].label;
   }
   const d = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
   svg("path", { d, fill: "none", stroke: "var(--worth)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, root);
@@ -656,18 +688,18 @@ function renderWorth(host, days, values) {
     const box = root.getBoundingClientRect(), scale = box.width / W;
     const px = fromKey ? box.left + x(i) * scale : ev.clientX;
     const py = fromKey ? box.top + y(values[i]) * scale : ev.clientY;
-    showTip(px, py, fmtDay(days[i]), [{ value: gold(values[i]), name: state.pocket === "all" ? "Net worth" : "Balance", color: "var(--worth)" }]);
+    showTip(px, py, buckets[i].tip, [{ value: gold(values[i]), name: state.pocket === "all" ? "Net worth" : "Balance", color: "var(--worth)" }]);
   };
   const hide = () => { cross.setAttribute("visibility", "hidden"); hideTip(); };
   const hit = svg("rect", { x: m.l, y: m.t, width: pw, height: ph, fill: "transparent" }, root);
   hit.addEventListener("pointermove", ev => {
     const box = root.getBoundingClientRect();
     const px = (ev.clientX - box.left) * W / box.width;
-    const i = days.length === 1 ? 0 : Math.round((px - m.l) / pw * (days.length - 1));
-    show(Math.max(0, Math.min(days.length - 1, i)), false, ev);
+    const i = n === 1 ? 0 : Math.round((px - m.l) / pw * (n - 1));
+    show(Math.max(0, Math.min(n - 1, i)), false, ev);
   });
   hit.addEventListener("pointerleave", hide);
-  keyboardScrub(root, days.length, show, hide);
+  keyboardScrub(root, n, show, hide);
 }
 
 // ---------------------------------------------------------------------------
@@ -688,25 +720,26 @@ function renderDaily(host, daily) {
     host.appendChild(el("div", { class: "empty" }, "No income or expenses in this range"));
     return;
   }
-  const W = Math.max(280, host.clientWidth), H = 240;
-  const m = { l: 52, r: 16, t: 12, b: 28 };
-  const pw = W - m.l - m.r, ph = H - m.t - m.b;
   const maxInc = Math.max(0, ...daily.map(d => d.inc));
   const minExp = Math.min(0, ...daily.map(d => d.exp));
   const { lo, hi, ticks } = niceTicks(minExp, maxInc);
+  const yLabels = axisLabels(ticks);
+  const W = Math.max(280, host.clientWidth), H = 240;
+  const m = { l: axisMargin(yLabels), r: 16, t: 12, b: 28 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
   const y = v => m.t + ph - (v - lo) / (hi - lo) * ph;
   const band = pw / daily.length;
   const bw = Math.max(1, Math.min(24, band * 0.7, band - 2));
   const bx = i => m.l + i * band + (band - bw) / 2;
 
   const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img",
-    "aria-label": "Daily income and expenses" }, host);
-  for (const t of ticks) {
+    "aria-label": "Income and expenses" }, host);
+  ticks.forEach((t, k) => {
     svg("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: "var(--grid)", "stroke-width": 1 }, root);
-    svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, root).textContent = compact(t);
-  }
+    svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, root).textContent = yLabels[k];
+  });
   for (const i of dateTickIndexes(daily.length, pw)) {
-    svg("text", { x: m.l + (i + 0.5) * band, y: H - 8, "text-anchor": "middle" }, root).textContent = fmtDay(daily[i].day);
+    svg("text", { x: m.l + (i + 0.5) * band, y: H - 8, "text-anchor": "middle" }, root).textContent = daily[i].label;
   }
   const wash = svg("rect", { y: m.t, height: ph, width: band, fill: "var(--wash)", visibility: "hidden" }, root);
   const r = Math.min(4, bw / 2);
@@ -723,7 +756,7 @@ function renderDaily(host, daily) {
     const box = root.getBoundingClientRect(), scale = box.width / W;
     const px = fromKey ? box.left + (m.l + (i + 0.5) * band) * scale : ev.clientX;
     const py = fromKey ? box.top + y(0) * scale : ev.clientY;
-    showTip(px, py, fmtDay(d.day), [
+    showTip(px, py, d.tip, [
       { value: gold(d.inc, true), name: "Income", color: "var(--income)" },
       { value: gold(d.exp, true), name: "Expenses", color: "var(--expense)" },
       { value: gold(d.inc + d.exp, true), name: "Net" },
@@ -786,7 +819,7 @@ function setDelta(node, curValue, prevValue, upIsGood) {
   const amount = prevValue === 0 ? "from 0" : `${Math.abs(Math.round(diff / Math.abs(prevValue) * 100))}%`;
   const mark = el("span", good === null ? {} : { class: good ? "good" : "bad" },
     `${diff === 0 ? "→" : up ? "▲" : "▼"} ${diff === 0 ? "0%" : amount}`);
-  node.append(mark, ` vs previous ${state.range} days`);
+  node.append(mark, state.range === 1 ? " vs yesterday" : ` vs previous ${state.range} days`);
 }
 
 // ---------------------------------------------------------------------------
@@ -860,7 +893,7 @@ function stepRange(dir) {
 
 function renderCharts() {
   if (state.page !== "overview") return;
-  renderWorth(document.getElementById("worth-chart"), model.days, model.worth);
+  renderWorth(document.getElementById("worth-chart"), model.daily, model.worth);
   renderDaily(document.getElementById("daily-chart"), model.daily);
 }
 
@@ -869,20 +902,22 @@ function update() {
   model = compute();
   renderNav();
   const { cur, prev } = model;
-  const ndays = model.days.length;
+  const ndays = model.ndays;
+  const unit = model.hourly ? "hour" : "day";
 
   const single = model.pocketIdx >= 0;
   document.getElementById("worth-label").textContent = single ? "Balance" : "Net worth";
   document.getElementById("worth-title").textContent = single ? "Balance over time" : "Net worth over time";
   document.getElementById("worth-sub").textContent = single
-    ? "Balance at the end of each day, including transfers to and from your other characters."
-    : "Balance at the end of each day. Transfers between your own characters don't change the total.";
+    ? `Balance at the end of each ${unit}, including transfers to and from your other characters.`
+    : `Balance at the end of each ${unit}. Transfers between your own characters don't change the total.`;
+  document.getElementById("daily-title").textContent = model.hourly ? "Hourly income and expenses" : "Daily income and expenses";
   document.getElementById("worth").replaceChildren(money(model.current));
   const change = model.current - model.startBalance;
   document.getElementById("worth-delta").replaceChildren(
     el("span", change === 0 ? {} : { class: change > 0 ? "good" : "bad" },
       `${change > 0 ? "▲" : change < 0 ? "▼" : "→"} ${gold(change, true)}`),
-    state.range === "all" ? " all time" : ` over ${state.range} days`);
+    state.range === "all" ? " all time" : state.range === 1 ? " today" : ` over ${state.range} days`);
 
   document.getElementById("kpi-income").replaceChildren(money(cur.inc));
   document.getElementById("kpi-expense").replaceChildren(money(cur.exp));
@@ -894,10 +929,11 @@ function update() {
   document.getElementById("kpi-day-delta").textContent = `average over ${ndays} day${ndays === 1 ? "" : "s"}`;
 
   renderCharts();
-  table(document.getElementById("worth-table"), [["Date"], [single ? "Balance" : "Net worth", true]],
-    model.days.map((d, i) => [fmtDay(d), money(model.worth[i])]).reverse());
-  table(document.getElementById("daily-table"), [["Date"], ["Income", true], ["Expenses", true], ["Net", true]],
-    model.daily.map(d => [fmtDay(d.day), money(d.inc, true), money(d.exp, true), money(d.inc + d.exp, true)]).reverse());
+  const when = model.hourly ? "Hour" : "Date";
+  table(document.getElementById("worth-table"), [[when], [single ? "Balance" : "Net worth", true]],
+    model.daily.map((d, i) => [d.tip, money(model.worth[i])]).reverse());
+  table(document.getElementById("daily-table"), [[when], ["Income", true], ["Expenses", true], ["Net", true]],
+    model.daily.map(d => [d.tip, money(d.inc, true), money(d.exp, true), money(d.inc + d.exp, true)]).reverse());
 
   document.getElementById("income-sub").textContent = `${gold(cur.inc)} total`;
   document.getElementById("expense-sub").textContent = `${gold(cur.exp)} total`;

@@ -27,5 +27,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tooltip is styled like the game's. It's dark only, like the game, so the light/dark
   toggle is gone.
 - Dashboard: a search box filters the ledger, and Export CSV downloads the filtered ledger.
+- Dashboard: a 1-day range that charts today hour by hour and compares it with yesterday.
 
 ### Fixed
