@@ -1,0 +1,46 @@
+# Mariposa
+
+A World of Warcraft (retail) addon that keeps an itemized gold ledger across all your
+characters, like `+1,000g World Quests · +300g Vendor Sales · −300g AH Purchases`, plus a
+companion script that loads the ledger into SQLite for offline dashboards.
+
+See [DESIGN.md](DESIGN.md) for what it tracks and how.
+
+## Stack
+
+- **Lua addon** (`Mariposa/`): the only thing WoW runs. Logs gold changes to SavedVariables.
+- **Python 3 companion** (`companion/`): standard library only. Parses SavedVariables into
+  SQLite and CSV, because addons can't write files or reach the network.
+
+## Setup
+
+Link the addon into your AddOns folder (macOS shown; on Windows use `mklink /D`):
+
+```bash
+ln -s "$PWD/Mariposa" "/Applications/World of Warcraft/_retail_/Interface/AddOns/Mariposa"
+lefthook install   # git hooks; see CONTRIBUTING.md
+```
+
+In game, `/mp help` lists the commands. After you `/reload` or log out, import the ledger:
+
+```bash
+python3 companion/mariposa.py --summary 7          # writes mariposa.db
+python3 companion/mariposa.py --csv ledger.csv     # also export CSV
+```
+
+If the addon shows as out of date, check your client's interface number with
+`/dump select(4, GetBuildInfo())` and add it to `## Interface:` in `Mariposa/Mariposa.toc`.
+
+## Testing
+
+```bash
+python3 -m unittest discover -s companion/tests
+luacheck .                  # optional: brew install luarocks && luarocks install luacheck
+```
+
+In game: `/mp debug` prints each transaction as it's recorded. Install BugGrabber + BugSack
+to catch Lua errors.
+
+## License
+
+[MIT](LICENSE)

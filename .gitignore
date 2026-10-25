@@ -1,0 +1,12 @@
+.DS_Store
+*.pem
+*.key
+credentials/
+
+.env*
+!.env.example
+
+# Companion output
+*.db
+*.csv
+__pycache__/

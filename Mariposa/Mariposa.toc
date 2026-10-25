@@ -1,0 +1,15 @@
+## Interface: 120007, 120100
+## Title: Mariposa
+## Notes: Gold ledger & net worth across your characters
+## Author: Tu Vo
+## Version: 0.1.0
+## SavedVariables: MariposaDB
+## IconTexture: Interface\Icons\INV_Misc_Coin_01
+
+Util.lua
+Categories.lua
+Context.lua
+Ledger.lua
+Hooks.lua
+Commands.lua
+Core.lua
