@@ -18,6 +18,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Companion: `--dashboard` writes an offline HTML dashboard covering net worth, income
   and expenses, category breakdowns, characters, the warband bank, and a filterable ledger.
 - Companion: `companion/synth.py` generates synthetic data for development.
+- Dashboard: a search box filters the ledger, and Export CSV downloads the filtered ledger.
+- Dashboard: a 1-day range that charts today hour by hour and compares it with the same
+  time yesterday.
 
 ### Changed
 
@@ -26,7 +29,5 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   buttons are red. Amounts show coin icons, characters show in their class colors, and the
   tooltip is styled like the game's. It's dark only, like the game, so the light/dark
   toggle is gone.
-- Dashboard: a search box filters the ledger, and Export CSV downloads the filtered ledger.
-- Dashboard: a 1-day range that charts today hour by hour and compares it with yesterday.
 
 ### Fixed

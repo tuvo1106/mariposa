@@ -28,8 +28,8 @@ is the source of truth for *what* we're building; this file is *how*.
   unknown event or hooking a missing function breaks the whole addon on load.
 - Amounts are always integer copper. Categories are defined only in
   `Mariposa/Categories.lua`; the companion reads labels and transfer flags from it.
-- Dashboard changes: regenerate with synthetic data (see README) and look at it in light,
-  dark, and at phone width. Data text goes into the DOM via `textContent` only.
+- Dashboard changes: regenerate with synthetic data (see README) and look at it at desktop
+  and phone width (it's dark only). Data text goes into the DOM via `textContent` only.
 - Changing the SavedVariables shape: bump `DB_VERSION` in `Core.lua`, migrate in `initDB`,
   and keep the importer reading both shapes.
 - The companion stays standard-library-only Python 3.

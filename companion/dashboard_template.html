@@ -370,23 +370,23 @@ const LEDGER_PAGE = 50;
 // Formatting
 
 const nf = new Intl.NumberFormat("en-US");
-function gold(copper, signed = false) {
+// Whole gold, or silver/copper for small amounts (postage, flights) that
+// would otherwise round to 0g. Shared by the text and coin-icon formats.
+function coinParts(copper, signed) {
   const abs = Math.round(Math.abs(copper));
   const sign = abs === 0 ? "" : copper < 0 ? "−" : signed ? "+" : "";
-  // Small amounts (postage, flights) would otherwise round to 0g.
-  if (abs > 0 && abs < G) return sign + (abs >= 100 ? Math.floor(abs / 100) + "s" : abs + "c");
-  return sign + nf.format(Math.round(abs / G)) + "g";
+  if (abs > 0 && abs < G) return abs >= 100 ? { sign, n: Math.floor(abs / 100), unit: "s" } : { sign, n: abs, unit: "c" };
+  return { sign, n: Math.round(abs / G), unit: "g" };
+}
+function gold(copper, signed = false) {
+  const { sign, n, unit } = coinParts(copper, signed);
+  return sign + nf.format(n) + unit;
 }
 // The same amount as a node with coin icons, for stats and tables.
 function money(copper, signed = false) {
-  const abs = Math.round(Math.abs(copper));
-  const span = el("span", { class: "money" });
-  span.append(abs === 0 ? "" : copper < 0 ? "−" : signed ? "+" : "");
-  const coins = abs === 0 || abs >= G ? [[Math.round(abs / G), "g"]]
-    : abs >= 100 ? [[Math.floor(abs / 100), "s"]] : [[abs, "c"]];
-  for (const [n, unit] of coins) {
-    span.append(nf.format(n), el("i", { class: `coin ${unit}`, "aria-hidden": "true" }), el("span", { class: "sr" }, unit));
-  }
+  const { sign, n, unit } = coinParts(copper, signed);
+  const span = el("span", { class: "money" }, sign + nf.format(n));
+  span.append(el("i", { class: `coin ${unit}`, "aria-hidden": "true" }), el("span", { class: "sr" }, unit));
   return span;
 }
 
@@ -396,9 +396,12 @@ const CLASS_COLORS = {
   HUNTER: "#aad372", MAGE: "#3fc7eb", MONK: "#00ff98", PALADIN: "#f48cba", PRIEST: "#ffffff",
   ROGUE: "#fff468", SHAMAN: "#0070dd", WARLOCK: "#8788ee", WARRIOR: "#c69b6d",
 };
+// Lighter shades for the three class colors under 4.5:1 on the dark panels,
+// used where the color is the text itself (sidebar dots keep the true color).
+const TEXT_SHADES = { DEATHKNIGHT: "#e8475f", DEMONHUNTER: "#b862dc", SHAMAN: "#3b93f0" };
 function nameNode(p) {
   const span = el("span", {}, p.name);
-  span.style.color = classColor(p);
+  span.style.color = (p.kind === "character" && TEXT_SHADES[p.cls]) || classColor(p);
   return span;
 }
 
@@ -418,7 +421,12 @@ const fmtHour = ts => hourFmt.format(new Date(ts * 1000));
 // (a narrow range like 3,764,100g..3,764,600g all reads "3.76M").
 function axisLabels(ticks) {
   const short = ticks.map(compact);
-  return new Set(short).size === short.length ? short : ticks.map(t => gold(t));
+  if (new Set(short).size === short.length) return short;
+  // Enough decimals for the tick step, down to a copper (0.0001g).
+  const step = ticks.length > 1 ? Math.abs(ticks[1] - ticks[0]) / G : 1;
+  const digits = Math.min(4, Math.max(0, Math.ceil(-Math.log10(step))));
+  const fmt = new Intl.NumberFormat("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return ticks.map(t => (t < 0 ? "−" : "") + fmt.format(Math.abs(t) / G) + "g");
 }
 const axisMargin = labels => Math.max(52, 14 + 6.5 * Math.max(...labels.map(l => l.length)));
 const label = cat => D.labels[cat] || cat;
@@ -449,7 +457,7 @@ function loadPrefs() {
     const saved = JSON.parse(localStorage.getItem("mariposa.filters") || "{}");
     if (RANGES.some(([v]) => v === saved.range)) state.range = saved.range;
     if (saved.pocket === "all" || D.pockets.some(p => p.key === saved.pocket)) state.pocket = saved.pocket;
-    if (["overview", "breakdown", "characters", "ledger"].includes(saved.page)) state.page = saved.page;
+    if (PAGES.some(([id]) => id === saved.page)) state.page = saved.page;
   } catch (_) { /* storage unavailable */ }
 }
 function savePrefs() {
@@ -487,6 +495,9 @@ function compute() {
   }
   const ndays = hourly ? 1 : starts.length;
   const prevStart = addDays(startDay, -ndays);
+  // Compare like with like: the current period is still in progress, so only
+  // count the same elapsed time of the previous one (today vs. yesterday by now).
+  const prevEnd = prevStart + (endTs - startDay);
 
   const pocketIdx = state.pocket === "all" ? -1 : D.pockets.findIndex(p => p.key === state.pocket);
   const inPocket = t => pocketIdx < 0 || t[0] === pocketIdx;
@@ -514,7 +525,7 @@ function compute() {
     if (ts < prevStart || ts > endTs) continue;
     const isXfer = TRANSFERS.has(cat);
     if (ts < startDay) {
-      if (inPocket(t) && !isXfer) (amount > 0 ? prev.inc += amount : prev.exp += amount);
+      if (ts <= prevEnd && inPocket(t) && !isXfer) (amount > 0 ? prev.inc += amount : prev.exp += amount);
       continue;
     }
     if (isXfer) perPocket[pi].xfer += amount;
@@ -819,7 +830,7 @@ function setDelta(node, curValue, prevValue, upIsGood) {
   const amount = prevValue === 0 ? "from 0" : `${Math.abs(Math.round(diff / Math.abs(prevValue) * 100))}%`;
   const mark = el("span", good === null ? {} : { class: good ? "good" : "bad" },
     `${diff === 0 ? "→" : up ? "▲" : "▼"} ${diff === 0 ? "0%" : amount}`);
-  node.append(mark, state.range === 1 ? " vs yesterday" : ` vs previous ${state.range} days`);
+  node.append(mark, state.range === 1 ? " vs this time yesterday" : ` vs previous ${state.range} days`);
 }
 
 // ---------------------------------------------------------------------------
@@ -853,28 +864,32 @@ function buildNav() {
 }
 
 function renderNav() {
-  const mark = (id, current) => {
+  const mark = (id, current, kind) => {
     for (const b of document.getElementById(id).children) {
-      if (b.dataset.key === current) b.setAttribute("aria-current", "true");
+      if (b.dataset.key === current) b.setAttribute("aria-current", kind);
       else b.removeAttribute("aria-current");
     }
   };
-  mark("page-nav", state.page);
-  mark("pocket-nav", state.pocket);
+  mark("page-nav", state.page, "page");
+  mark("pocket-nav", state.pocket, "true");
   const i = RANGES.findIndex(([v]) => v === state.range);
   document.getElementById("range-select").value = String(RANGES[i][0]);
   document.getElementById("range-prev").disabled = i === 0;
   document.getElementById("range-next").disabled = i === RANGES.length - 1;
 }
 
-function showPage(id) {
+function setVisiblePage(id) {
   state.page = id;
-  savePrefs();
   for (const page of document.querySelectorAll(".page")) page.hidden = page.dataset.page !== id;
   document.getElementById("page-title").textContent = PAGES.find(([p]) => p === id)[1];
+}
+
+function showPage(id) {
+  setVisiblePage(id);
+  savePrefs();
   renderNav();
   // Charts measure their container, so draw them once they're visible.
-  if (id === "overview" && model) renderCharts();
+  if (id === "overview") renderCharts();
 }
 
 function setPocket(key) {
@@ -891,8 +906,10 @@ function stepRange(dir) {
   update();
 }
 
+let chartWidth = 0;  // container width at the last draw
 function renderCharts() {
   if (state.page !== "overview") return;
+  chartWidth = document.getElementById("worth-chart").clientWidth;
   renderWorth(document.getElementById("worth-chart"), model.daily, model.worth);
   renderDaily(document.getElementById("daily-chart"), model.daily);
 }
@@ -983,8 +1000,8 @@ function exportCsv() {
   // Prefix text that a spreadsheet would read as a formula.
   const text = v => {
     const s = v == null ? "" : String(v);
-    const safe = /^[=+\-@]/.test(s) ? "'" + s : s;
-    return /[",\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+    const safe = /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
+    return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
   };
   const lines = [["time", "character", "realm", "category", "copper", "detail"].join(",")];
   for (const [pi, ts, amount, cat, ref] of ledgerRows()) {
@@ -996,7 +1013,8 @@ function exportCsv() {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  // Some browsers start blob downloads asynchronously; revoking right away can cancel them.
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 document.getElementById("ledger-cat").addEventListener("change", e => {
@@ -1031,15 +1049,14 @@ document.getElementById("meta").textContent =
 
 loadPrefs();
 buildNav();
+setVisiblePage(state.page);
 update();
-showPage(state.page);
 // Redraw charts only when their width changes, not when the page grows.
 const chartHost = document.getElementById("worth-chart");
-let resizeTimer, lastWidth = chartHost.clientWidth;
-new ResizeObserver(entries => {
-  const width = Math.round(entries[0].contentRect.width);
-  if (width === lastWidth || width === 0) return;
-  lastWidth = width;
+let resizeTimer;
+new ResizeObserver(() => {
+  const width = chartHost.clientWidth;
+  if (width === chartWidth || width === 0) return;
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => model && renderCharts(), 100);
 }).observe(chartHost);
