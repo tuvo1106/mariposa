@@ -106,7 +106,14 @@ handlers.ACCOUNT_MONEY = snapshotWarband
 function handlers.PLAYER_LOGOUT()
   -- The flush timer won't fire after logout; settle pending money now.
   ns.Ledger:Flush()
-  ns.char.gold = GetMoney()
+  -- GetMoney() can return 0 during logout. ns.char.gold is already kept current
+  -- by PLAYER_LOGIN and every PLAYER_MONEY, so a 0 here is a bad read, not a
+  -- real balance. Letting it overwrite would zero the saved balance and make the
+  -- next login re-book the whole amount as an "adjustment". A genuine empty
+  -- wallet was already recorded as 0 by PLAYER_MONEY, so skipping the update is
+  -- safe. Only trust a non-zero final read.
+  local money = GetMoney()
+  if money and money > 0 then ns.char.gold = money end
   ns.char.lastSeen = GetServerTime()
   snapshotWarband()
 end
