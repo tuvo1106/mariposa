@@ -31,13 +31,27 @@ local function initDB()
   end
 end
 
+local function canViewAccountBank()
+  -- CanViewBank reports whether the account bank is currently loaded. Looked up
+  -- defensively so a missing API on older clients doesn't error.
+  if C_Bank.CanViewBank then
+    local ok, can = pcall(C_Bank.CanViewBank, Enum.BankType.Account)
+    if ok then return can end
+  end
+  return false
+end
+
 local function snapshotWarband()
   if not (C_Bank and C_Bank.FetchDepositedMoney and Enum.BankType and Enum.BankType.Account) then return end
   local gold = C_Bank.FetchDepositedMoney(Enum.BankType.Account)
-  if gold then
-    ns.db.warband.gold = gold
-    ns.db.warband.updated = GetServerTime()
-  end
+  if not gold then return end
+  -- FetchDepositedMoney only returns a live figure while the account bank is
+  -- loaded (at a banker). Elsewhere -- notably at logout -- it reports 0, which
+  -- must not clobber the balance captured at the bank. A 0 is only trusted when
+  -- the bank is actually viewable, i.e. a genuinely empty warband bank.
+  if gold == 0 and not canViewAccountBank() then return end
+  ns.db.warband.gold = gold
+  ns.db.warband.updated = GetServerTime()
 end
 
 local handlers = {}
@@ -92,7 +106,14 @@ handlers.ACCOUNT_MONEY = snapshotWarband
 function handlers.PLAYER_LOGOUT()
   -- The flush timer won't fire after logout; settle pending money now.
   ns.Ledger:Flush()
-  ns.char.gold = GetMoney()
+  -- GetMoney() can return 0 during logout. ns.char.gold is already kept current
+  -- by PLAYER_LOGIN and every PLAYER_MONEY, so a 0 here is a bad read, not a
+  -- real balance. Letting it overwrite would zero the saved balance and make the
+  -- next login re-book the whole amount as an "adjustment". A genuine empty
+  -- wallet was already recorded as 0 by PLAYER_MONEY, so skipping the update is
+  -- safe. Only trust a non-zero final read.
+  local money = GetMoney()
+  if money and money > 0 then ns.char.gold = money end
   ns.char.lastSeen = GetServerTime()
   snapshotWarband()
 end
