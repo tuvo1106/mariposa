@@ -286,13 +286,17 @@ def print_summary(conn: sqlite3.Connection, days: int):
         """SELECT category, SUM(amount) FROM transactions WHERE ts >= ?
            GROUP BY category ORDER BY ABS(SUM(amount)) DESC""", (since,)).fetchall()
     print(f"Last {days} days, all characters")
+    # Readable labels, in a column wide enough for the longest one, so a long
+    # name like "Crafting Commissions" can't push its amount out of line.
+    labels = [CATEGORIES.get(c, {}).get("label", c) for c, _ in rows]
+    width = max([len(s) for s in labels] + [len("Net")])
     net = 0
-    for category, total in rows:
+    for (category, total), label in zip(rows, labels):
         note = "  (transfer, not counted)" if category in TRANSFER_CATEGORIES else ""
         if not note:
             net += total
-        print(f"  {category:<14} {gold(total):>14}{note}")
-    print(f"  {'net':<14} {gold(net):>14}")
+        print(f"  {label:<{width}} {gold(total):>14}{note}")
+    print(f"  {'Net':<{width}} {gold(net):>14}")
 
 
 def main(argv: list[str] | None = None) -> int:
