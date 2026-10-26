@@ -21,6 +21,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Dashboard: a search box filters the ledger, and Export CSV downloads the filtered ledger.
 - Dashboard: a 1-day range that charts today hour by hour and compares it with the same
   time yesterday.
+- Addon: crafting orders are tracked as Crafting Orders (the tip paid to place one) and
+  Crafting Commissions (earned fulfilling one) instead of Other.
 
 ### Changed
 
@@ -29,5 +31,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   buttons are red. Amounts show coin icons, characters show in their class colors, and the
   tooltip is styled like the game's. It's dark only, like the game, so the light/dark
   toggle is gone.
+- Companion: --summary prints category names instead of internal keys, in a column wide
+  enough for the longest one.
 
 ### Fixed
