@@ -23,6 +23,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   time yesterday.
 - Dashboard: a Balance by character chart on the Overview, with one line per character in
   its class color, a hover readout of every character's balance, and a table view.
+- Addon: crafting orders are tracked as Crafting Orders (the tip paid to place one) and
+  Crafting Commissions (earned fulfilling one) instead of Other.
 
 ### Changed
 
@@ -31,6 +33,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   buttons are red. Amounts show coin icons, characters show in their class colors, and the
   tooltip is styled like the game's. It's dark only, like the game, so the light/dark
   toggle is gone.
+- Companion: `--summary` prints category names instead of internal keys, in a column wide
+  enough for the longest one.
 
 ### Fixed
 
