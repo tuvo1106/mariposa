@@ -50,8 +50,16 @@ def dashboard_data(conn: sqlite3.Connection, categories: dict) -> dict:
         if category == "xfer_warband" and account in warband_index:
             tx.append([warband_index[account], ts, -amount, category, pockets[index[key]]["name"]])
 
+    # When the game last wrote this data: the newest character sighting or
+    # warband snapshot. Shown alongside generatedAt, which is only when this
+    # page was built, so a dashboard built from stale data doesn't look fresh.
+    data_as_of = conn.execute(
+        """SELECT MAX(t) FROM (SELECT MAX(last_seen) AS t FROM characters
+                               UNION ALL SELECT MAX(updated) FROM warband)""").fetchone()[0]
+
     return {
         "generatedAt": int(time.time()),
+        "dataAsOf": data_as_of,
         "pockets": pockets,
         "tx": tx,
         "labels": {k: v["label"] for k, v in categories.items()},

@@ -303,7 +303,7 @@ details .table-wrap { margin-top: 8px; max-height: 320px; overflow-y: auto; }
           </div>
           <div class="panel" id="char-worth-panel">
             <h3>Balance by character</h3>
-            <p class="sub">Each character's balance at the end of each day, transfers included.</p>
+            <p class="sub" id="char-worth-sub"></p>
             <div class="legend" id="char-legend"></div>
             <div class="chart" id="char-worth-chart"></div>
             <details><summary>Show as table</summary><div class="table-wrap" id="char-worth-table"></div></details>
@@ -478,16 +478,9 @@ function savePrefs() {
 // ---------------------------------------------------------------------------
 // Aggregation
 
-function compute() {
-  // Transactions carry server time; a PC clock running behind can stamp the
-  // newest ones after generatedAt, and the balances already include them.
-  const lastTs = D.tx.length ? D.tx[D.tx.length - 1][1] : 0;
-  const endTs = Math.max(D.generatedAt, lastTs);
-  const endDay = startOfDay(endTs);
-  const firstTs = D.tx.length ? D.tx[0][1] : endTs;
-  const startDay = state.range === "all" ? startOfDay(firstTs) : addDays(endDay, -(state.range - 1));
-  // One day is bucketed by hour, longer ranges by day.
-  const hourly = state.range === 1;
+// Bucket start times: each hour of `startDay` up to endTs, or each day from
+// startDay through endTs's day.
+function bucketStarts(startDay, endTs, hourly) {
   const starts = [];
   if (hourly) {
     for (let h = 0; h < 24; h++) {
@@ -498,8 +491,56 @@ function compute() {
       if (t !== starts[starts.length - 1]) starts.push(t);  // DST can repeat an hour
     }
   } else {
-    for (let d = startDay; d <= endDay; d = addDays(d, 1)) starts.push(d);
+    for (let d = startDay; d <= startOfDay(endTs); d = addDays(d, 1)) starts.push(d);
   }
+  return starts;
+}
+
+function bucketLabels(starts, hourly) {
+  return starts.map(start => ({
+    start,
+    label: hourly ? fmtHour(start) : fmtDay(start),
+    tip: hourly ? `${fmtDay(start)}, ${fmtHour(start)}` : fmtDay(start),
+  }));
+}
+
+// Each pocket's balance at the end of every bucket, walked back from its
+// current gold. Buckets before a pocket's first transaction are null: walking
+// past it would only repeat its first balance, a flat line that isn't history.
+function pocketBalances(starts) {
+  const n = starts.length;
+  const bucket = ts => { let i = n - 1; while (i > 0 && starts[i] > ts) i--; return i; };
+  const delta = D.pockets.map(() => new Array(n).fill(0));
+  const first = D.pockets.map(() => Infinity);
+  for (const [pi, ts, amount] of D.tx) {
+    if (ts < first[pi]) first[pi] = ts;
+    if (ts >= starts[0]) delta[pi][bucket(ts)] += amount;
+  }
+  return D.pockets.map((p, pi) => {
+    const vals = new Array(n);
+    let b = p.gold;
+    for (let i = n - 1; i >= 0; i--) {
+      vals[i] = b;
+      b -= delta[pi][i];
+    }
+    // No transactions at all: only the current balance is known.
+    const from = first[pi] === Infinity ? n - 1 : first[pi] < starts[0] ? 0 : bucket(first[pi]);
+    for (let i = 0; i < from; i++) vals[i] = null;
+    return vals;
+  });
+}
+
+function compute() {
+  // Transactions carry server time; a PC clock running behind can stamp the
+  // newest ones after generatedAt, and the balances already include them.
+  const lastTs = D.tx.length ? D.tx[D.tx.length - 1][1] : 0;
+  const endTs = Math.max(D.generatedAt, lastTs);
+  const endDay = startOfDay(endTs);
+  const firstTs = D.tx.length ? D.tx[0][1] : endTs;
+  const startDay = state.range === "all" ? startOfDay(firstTs) : addDays(endDay, -(state.range - 1));
+  // One day is bucketed by hour, longer ranges by day.
+  const hourly = state.range === 1;
+  const starts = bucketStarts(startDay, endTs, hourly);
   const ndays = hourly ? 1 : starts.length;
   const prevStart = addDays(startDay, -ndays);
   // Compare like with like: the current period is still in progress, so only
@@ -517,15 +558,9 @@ function compute() {
   const bucketOf = hourly
     ? ts => { let i = starts.length - 1; while (i > 0 && starts[i] > ts) i--; return i; }
     : ts => dayIndex.get(startOfDay(ts));
-  const daily = starts.map(start => ({
-    start, inc: 0, exp: 0, delta: 0,
-    label: hourly ? fmtHour(start) : fmtDay(start),
-    tip: hourly ? `${fmtDay(start)}, ${fmtHour(start)}` : fmtDay(start),
-  }));
+  const daily = bucketLabels(starts, hourly).map(b => ({ ...b, inc: 0, exp: 0, delta: 0 }));
   const incomeCats = new Map(), expenseCats = new Map();
   const perPocket = D.pockets.map(() => ({ inc: 0, exp: 0, xfer: 0 }));
-  // Per-pocket per-bucket deltas, for one balance line per character.
-  const perPocketDelta = D.pockets.map(() => new Array(starts.length).fill(0));
   const cur = { inc: 0, exp: 0 }, prev = { inc: 0, exp: 0 };
   const ledger = [];
 
@@ -540,8 +575,6 @@ function compute() {
     if (isXfer) perPocket[pi].xfer += amount;
     else if (amount > 0) perPocket[pi].inc += amount;
     else perPocket[pi].exp += amount;
-    const bi = bucketOf(ts);
-    if (bi !== undefined) perPocketDelta[pi][bi] += amount;
     if (!inPocket(t)) continue;
 
     const di = bucketOf(ts);
@@ -569,21 +602,18 @@ function compute() {
     bal -= daily[i].delta;
   }
 
-  // One balance line per pocket, each walked back from its own current gold.
-  const perPocketWorth = D.pockets.map((p, pi) => {
-    const vals = new Array(daily.length);
-    let b = p.gold;
-    for (let i = daily.length - 1; i >= 0; i--) {
-      vals[i] = b;
-      b -= perPocketDelta[pi][i];
-    }
-    return vals;
-  });
+  const perPocketWorth = pocketBalances(starts);
+
+  // Days the selected pocket actually has history for, so a per-day average
+  // over a 30-day range with 2 days of data divides by 2, not 30.
+  const coveredDays = hourly ? 1
+    : Math.max(1, starts.filter(d => d >= startOfDay(pocketFirstTs)).length);
 
   ledger.reverse();
   const byAmount = (a, b) => Math.abs(b[1]) - Math.abs(a[1]);
   return {
-    daily, hourly, ndays, worth, perPocketWorth, current, startBalance: bal,
+    daily, hourly, ndays, coveredDays, worth, perPocketWorth, current, startBalance: bal,
+    starts, endTs,
     cur, prev,
     // Only compare against a previous period the data fully covers.
     hasPrev: state.range !== "all" && pocketFirstTs <= prevStart,
@@ -682,88 +712,37 @@ function keyboardScrub(node, n, show, hide) {
 }
 
 // ---------------------------------------------------------------------------
-// Net worth line
+// Balance lines: net worth (one series) and balance by character (several), on
+// shared axes. A null value means no history yet, so that line starts later.
 
-function renderWorth(host, buckets, values) {
+function renderLines(host, buckets, series, { label, legendHost = null, endLabel = false }) {
   host.replaceChildren();
-  const { lo, hi, ticks } = niceTicks(Math.min(...values), Math.max(...values));
-  const yLabels = axisLabels(ticks);
-  const W = Math.max(280, host.clientWidth), H = 240;
-  const m = { l: axisMargin(yLabels), r: 64, t: 12, b: 28 };
-  const pw = W - m.l - m.r, ph = H - m.t - m.b;
-  const n = buckets.length;
-  const x = i => m.l + (n === 1 ? pw / 2 : i * pw / (n - 1));
-  const y = v => m.t + ph - (v - lo) / (hi - lo) * ph;
-
-  const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img",
-    "aria-label": `Net worth, ${buckets[0].tip} to ${buckets[n - 1].tip}` }, host);
-  ticks.forEach((t, k) => {
-    svg("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: "var(--grid)", "stroke-width": 1 }, root);
-    svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, root).textContent = yLabels[k];
-  });
-  for (const i of dateTickIndexes(n, pw)) {
-    svg("text", { x: x(i), y: H - 8, "text-anchor": i === 0 ? "start" : i === n - 1 ? "end" : "middle" }, root)
-      .textContent = buckets[i].label;
+  if (legendHost) {
+    legendHost.replaceChildren(...series.map(s => {
+      const span = el("span");
+      span.appendChild(el("i", { class: "swatch" })).style.background = s.color;
+      span.append(s.name);
+      return span;
+    }));
   }
-  const d = values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
-  svg("path", { d, fill: "none", stroke: "var(--worth)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, root);
-  const last = values.length - 1;
-  svg("circle", { cx: x(last), cy: y(values[last]), r: 4, fill: "var(--worth)", stroke: "var(--surface)", "stroke-width": 2 }, root);
-  svg("text", { x: x(last) + 10, y: y(values[last]) + 4, class: "end-label" }, root).textContent = compact(values[last]);
-
-  const cross = svg("g", { visibility: "hidden" }, root);
-  const cline = svg("line", { y1: m.t, y2: m.t + ph, stroke: "var(--baseline)", "stroke-width": 1 }, cross);
-  const cdot = svg("circle", { r: 4, fill: "var(--worth)", stroke: "var(--surface)", "stroke-width": 2 }, cross);
-  const show = (i, fromKey, ev) => {
-    cross.setAttribute("visibility", "visible");
-    cline.setAttribute("x1", x(i)); cline.setAttribute("x2", x(i));
-    cdot.setAttribute("cx", x(i)); cdot.setAttribute("cy", y(values[i]));
-    const box = root.getBoundingClientRect(), scale = box.width / W;
-    const px = fromKey ? box.left + x(i) * scale : ev.clientX;
-    const py = fromKey ? box.top + y(values[i]) * scale : ev.clientY;
-    showTip(px, py, buckets[i].tip, [{ value: gold(values[i]), name: state.pocket === "all" ? "Net worth" : "Balance", color: "var(--worth)" }]);
-  };
-  const hide = () => { cross.setAttribute("visibility", "hidden"); hideTip(); };
-  const hit = svg("rect", { x: m.l, y: m.t, width: pw, height: ph, fill: "transparent" }, root);
-  hit.addEventListener("pointermove", ev => {
-    const box = root.getBoundingClientRect();
-    const px = (ev.clientX - box.left) * W / box.width;
-    const i = n === 1 ? 0 : Math.round((px - m.l) / pw * (n - 1));
-    show(Math.max(0, Math.min(n - 1, i)), false, ev);
-  });
-  hit.addEventListener("pointerleave", hide);
-  keyboardScrub(root, n, show, hide);
-}
-
-// ---------------------------------------------------------------------------
-// One balance line per character, shared axes
-
-function renderMultiWorth(host, legendHost, buckets, series) {
-  host.replaceChildren();
-  legendHost.replaceChildren();
-  if (!series.length) {
-    host.appendChild(el("div", { class: "empty" }, "No characters to compare"));
+  const known = series.flatMap(s => s.values.filter(v => v !== null));
+  if (!buckets.length || !known.length) {
+    host.appendChild(el("div", { class: "empty" }, "Nothing to chart in this range"));
     return;
   }
-  legendHost.replaceChildren(...series.map(s => {
-    const span = el("span");
-    span.appendChild(el("i", { class: "swatch" })).style.background = s.color;
-    span.append(s.name);
-    return span;
-  }));
-
-  const allVals = series.flatMap(s => s.values);
-  const { lo, hi, ticks } = niceTicks(Math.min(...allVals), Math.max(...allVals));
+  const single = series.length === 1;
+  const { lo, hi, ticks } = niceTicks(Math.min(...known), Math.max(...known));
   const yLabels = axisLabels(ticks);
   const W = Math.max(280, host.clientWidth), H = 240;
-  const m = { l: axisMargin(yLabels), r: 16, t: 12, b: 28 };
+  const m = { l: axisMargin(yLabels), r: endLabel ? 64 : 16, t: 12, b: 28 };
   const pw = W - m.l - m.r, ph = H - m.t - m.b;
   const n = buckets.length;
   const x = i => m.l + (n === 1 ? pw / 2 : i * pw / (n - 1));
   const y = v => m.t + ph - (v - lo) / (hi - lo) * ph;
+  const ring = single ? 2 : 1.5;
 
   const root = svg("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img",
-    "aria-label": `Balance by character, ${buckets[0].tip} to ${buckets[n - 1].tip}` }, host);
+    "aria-label": `${label}, ${buckets[0].tip} to ${buckets[n - 1].tip}` }, host);
   ticks.forEach((t, k) => {
     svg("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: "var(--grid)", "stroke-width": 1 }, root);
     svg("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, root).textContent = yLabels[k];
@@ -773,26 +752,41 @@ function renderMultiWorth(host, legendHost, buckets, series) {
       .textContent = buckets[i].label;
   }
   for (const s of series) {
-    const d = s.values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+    let d = "", pen = "M";
+    s.values.forEach((v, i) => {
+      if (v === null) { pen = "M"; return; }
+      d += `${pen}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
+      pen = "L";
+    });
     svg("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, root);
-    svg("circle", { cx: x(n - 1), cy: y(s.values[n - 1]), r: 3, fill: s.color, stroke: "var(--surface)", "stroke-width": 1.5 }, root);
+    // The end dot also shows a line that only starts in the last bucket.
+    const last = s.values[n - 1];
+    if (last === null) continue;
+    svg("circle", { cx: x(n - 1), cy: y(last), r: single ? 4 : 3, fill: s.color, stroke: "var(--surface)", "stroke-width": ring }, root);
+    if (endLabel) svg("text", { x: x(n - 1) + 10, y: y(last) + 4, class: "end-label" }, root).textContent = compact(last);
   }
 
   const cross = svg("g", { visibility: "hidden" }, root);
   const cline = svg("line", { y1: m.t, y2: m.t + ph, stroke: "var(--baseline)", "stroke-width": 1 }, cross);
-  const dots = series.map(s => svg("circle", { r: 3.5, fill: s.color, stroke: "var(--surface)", "stroke-width": 1.5 }, cross));
+  const dots = series.map(s => svg("circle", { r: single ? 4 : 3.5, fill: s.color, stroke: "var(--surface)", "stroke-width": ring }, cross));
   const show = (i, fromKey, ev) => {
     cross.setAttribute("visibility", "visible");
     cline.setAttribute("x1", x(i)); cline.setAttribute("x2", x(i));
-    series.forEach((s, si) => { dots[si].setAttribute("cx", x(i)); dots[si].setAttribute("cy", y(s.values[i])); });
+    series.forEach((s, si) => {
+      const v = s.values[i];
+      dots[si].setAttribute("visibility", v === null ? "hidden" : "inherit");
+      if (v !== null) { dots[si].setAttribute("cx", x(i)); dots[si].setAttribute("cy", y(v)); }
+    });
     const box = root.getBoundingClientRect(), scale = box.width / W;
+    const anchor = single && series[0].values[i] !== null ? y(series[0].values[i]) : m.t;
     const px = fromKey ? box.left + x(i) * scale : ev.clientX;
-    const py = fromKey ? box.top + m.t * scale : ev.clientY;
+    const py = fromKey ? box.top + anchor * scale : ev.clientY;
     const rows = series
+      .filter(s => s.values[i] !== null)
       .map(s => ({ v: s.values[i], name: s.name, color: s.color }))
       .sort((a, b) => b.v - a.v)
       .map(r => ({ value: gold(r.v), name: r.name, color: r.color }));
-    showTip(px, py, buckets[i].tip, rows);
+    showTip(px, py, buckets[i].tip, rows.length ? rows : [{ value: "—", name: "No history yet" }]);
   };
   const hide = () => { cross.setAttribute("visibility", "hidden"); hideTip(); };
   const hit = svg("rect", { x: m.l, y: m.t, width: pw, height: ph, fill: "transparent" }, root);
@@ -1003,24 +997,52 @@ function stepRange(dir) {
 const CHAR_POCKETS = D.pockets
   .map((p, i) => ({ p, i }))
   .filter(({ p }) => p.kind === "character");
-function charSeries() {
-  return CHAR_POCKETS.map(({ p, i }) => ({
-    name: p.name,
-    color: (TEXT_SHADES[p.cls] || classColor(p)) || "var(--worth)",
-    values: model.perPocketWorth[i],
-  }));
+// What the character chart and its table show: from the first bucket where
+// any character has history, so there are no flat, back-filled lines. When
+// that history is only today, chart today by hour; a single daily point per
+// character would show nothing.
+function charView() {
+  const historyStart = lines => {
+    const known = CHAR_POCKETS.map(({ i }) => lines[i].findIndex(v => v !== null)).filter(f => f >= 0);
+    return known.length ? Math.min(...known) : lines[0].length;
+  };
+  let { starts, hourly, perPocketWorth: lines } = model;
+  let from = historyStart(lines);
+  if (!hourly && from === starts.length - 1) {
+    hourly = true;
+    starts = bucketStarts(starts[from], model.endTs, true);
+    lines = pocketBalances(starts);
+    from = historyStart(lines);
+  }
+  return {
+    hourly,
+    buckets: bucketLabels(starts, hourly).slice(from),
+    series: CHAR_POCKETS.map(({ p, i }) => ({
+      name: p.name,
+      color: (TEXT_SHADES[p.cls] || classColor(p)) || "var(--worth)",
+      values: lines[i].slice(from),
+    })),
+  };
 }
 
 let chartWidth = 0;  // container width at the last draw
 function renderCharts() {
   if (state.page !== "overview") return;
   chartWidth = document.getElementById("worth-chart").clientWidth;
-  renderWorth(document.getElementById("worth-chart"), model.daily, model.worth);
+  const worthName = model.pocketIdx >= 0 ? "Balance" : "Net worth";
+  renderLines(document.getElementById("worth-chart"), model.daily,
+    [{ name: worthName, color: "var(--worth)", values: model.worth }], { label: worthName, endLabel: true });
+  // Comparing characters only makes sense across all of them; with one
+  // selected, the chart above already shows its balance.
   const panel = document.getElementById("char-worth-panel");
-  panel.hidden = CHAR_POCKETS.length === 0;
-  if (CHAR_POCKETS.length) {
-    renderMultiWorth(document.getElementById("char-worth-chart"),
-      document.getElementById("char-legend"), model.daily, charSeries());
+  panel.hidden = CHAR_POCKETS.length === 0 || model.pocketIdx >= 0;
+  if (!panel.hidden) {
+    const view = charView();
+    document.getElementById("char-worth-sub").textContent =
+      `Each character's balance at the end of each ${view.hourly ? "hour" : "day"}, from its first ` +
+      "recorded transaction. Transfers included.";
+    renderLines(document.getElementById("char-worth-chart"), view.buckets, view.series,
+      { label: "Balance by character", legendHost: document.getElementById("char-legend") });
   }
   renderDaily(document.getElementById("daily-chart"), model.daily);
 }
@@ -1030,7 +1052,6 @@ function update() {
   model = compute();
   renderNav();
   const { cur, prev } = model;
-  const ndays = model.ndays;
   const unit = model.hourly ? "hour" : "day";
 
   const single = model.pocketIdx >= 0;
@@ -1050,20 +1071,23 @@ function update() {
   document.getElementById("kpi-income").replaceChildren(money(cur.inc));
   document.getElementById("kpi-expense").replaceChildren(money(cur.exp));
   document.getElementById("kpi-net").replaceChildren(money(cur.inc + cur.exp, true));
-  document.getElementById("kpi-day").replaceChildren(money((cur.inc + cur.exp) / ndays, true));
+  const covered = model.coveredDays;
+  document.getElementById("kpi-day").replaceChildren(money((cur.inc + cur.exp) / covered, true));
   setDelta(document.getElementById("kpi-income-delta"), cur.inc, prev.inc, true);
   setDelta(document.getElementById("kpi-expense-delta"), -cur.exp, -prev.exp, false);
   setDelta(document.getElementById("kpi-net-delta"), cur.inc + cur.exp, prev.inc + prev.exp, true);
-  document.getElementById("kpi-day-delta").textContent = `average over ${ndays} day${ndays === 1 ? "" : "s"}`;
+  document.getElementById("kpi-day-delta").textContent = `average over ${covered} day${covered === 1 ? "" : "s"}`;
 
   renderCharts();
   const when = model.hourly ? "Hour" : "Date";
   table(document.getElementById("worth-table"), [[when], [single ? "Balance" : "Net worth", true]],
     model.daily.map((d, i) => [d.tip, money(model.worth[i])]).reverse());
   if (CHAR_POCKETS.length) {
+    const view = charView();
+    const cell = v => v === null ? "—" : money(v);
     table(document.getElementById("char-worth-table"),
-      [[when], ...CHAR_POCKETS.map(({ p }) => [p.name, true])],
-      model.daily.map((d, bi) => [d.tip, ...CHAR_POCKETS.map(({ i }) => money(model.perPocketWorth[i][bi]))]).reverse());
+      [[view.hourly ? "Hour" : "Date"], ...view.series.map(s => [s.name, true])],
+      view.buckets.map((b, k) => [b.tip, ...view.series.map(s => cell(s.values[k]))]).reverse());
   }
   table(document.getElementById("daily-table"), [[when], ["Income", true], ["Expenses", true], ["Net", true]],
     model.daily.map(d => [d.tip, money(d.inc, true), money(d.exp, true), money(d.inc + d.exp, true)]).reverse());
@@ -1160,8 +1184,13 @@ document.getElementById("range-next").addEventListener("click", () => stepRange(
 document.getElementById("export").addEventListener("click", exportCsv);
 
 const pocketCount = D.pockets.filter(p => p.kind === "character").length;
+// Lead with when the game saved this data, not when the page was built: a page
+// rebuilt from an old save would otherwise look current.
+const stamp = ts => timeFmt.format(new Date(ts * 1000));
 document.getElementById("meta").textContent =
-  `${pocketCount} character${pocketCount === 1 ? "" : "s"} · updated ${timeFmt.format(new Date(D.generatedAt * 1000))}`;
+  `${pocketCount} character${pocketCount === 1 ? "" : "s"} · ` +
+  (D.dataAsOf ? `game data from ${stamp(D.dataAsOf)} · page built ${stamp(D.generatedAt)}`
+    : `page built ${stamp(D.generatedAt)}`);
 
 loadPrefs();
 buildNav();

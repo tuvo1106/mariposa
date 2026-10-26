@@ -83,6 +83,12 @@ class SyntheticPipelineTest(unittest.TestCase):
         payload = html.split('id="mariposa-data">', 1)[1].split("</script>", 1)[0]
         self.assertIn("</script><b>x", json.dumps(json.loads(payload)["tx"], ensure_ascii=False))
 
+    def test_data_as_of_is_the_newest_game_save(self):
+        # The footer leads with this, so it must reflect the data, not the build time.
+        newest = max(c["lastSeen"] for c in self.db["chars"].values())
+        newest = max(newest, self.db["warband"].get("updated") or 0)
+        self.assertEqual(self.data["dataAsOf"], newest)
+
 
 if __name__ == "__main__":
     unittest.main()

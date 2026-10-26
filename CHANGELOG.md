@@ -37,6 +37,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   toggle is gone.
 - Companion: `--summary` prints category names instead of internal keys, in a column wide
   enough for the longest one.
+- Companion: the database defaults to `mariposa.db` in the repo root instead of the current
+  folder, and every run prints which database it used.
+- Companion: `--summary` shows amounts under 1g in silver or copper, and its days start at
+  local midnight, matching the dashboard's ranges.
+- Dashboard: the footer shows when the game data was saved, next to when the page was built.
+- Dashboard: Balance by character starts at each character's first recorded transaction, is
+  charted by hour when all history is from today, and is hidden while a single character is
+  selected.
+- Addon: `/mp chars` shows character names, adding the realm only when two share a name, and
+  `/mp week` covers the same calendar days as the dashboard.
 
 ### Fixed
 
@@ -45,3 +55,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   balance as Untracked Change.
 - Companion: resetting a character no longer leaves its old transactions behind, and
   characters deleted from the addon's data are dropped on the next import.
+- Addon: opening a bag that holds no gold, or fulfilling a crafting order with no
+  commission, no longer labels the next unrelated gold as Reward Bags or Crafting
+  Commissions.
+- Dashboard: Per day divides by the days your data covers, not the whole selected range.

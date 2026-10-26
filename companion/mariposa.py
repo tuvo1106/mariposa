@@ -7,7 +7,7 @@ A character whose in-game ledger was reset (deleted and recreated, so its seq
 counter restarts) is detected and its stale rows are replaced, so reused seq
 numbers don't leave old transactions behind.
 
-    python3 mariposa.py                    # auto-detect WoW, write mariposa.db
+    python3 mariposa.py                    # auto-detect WoW, write <repo>/mariposa.db
     python3 mariposa.py --wtf PATH --db out.db --csv out.csv
     python3 mariposa.py --summary 7        # print last 7 days by category
     python3 mariposa.py --dashboard dashboard.html
@@ -19,8 +19,12 @@ import csv
 import re
 import sqlite3
 import sys
-import time
+from datetime import datetime, timedelta
 from pathlib import Path
+
+# The repo root. Defaults hang off it rather than the current folder, so the
+# importer finds the same database no matter where it's run from.
+REPO = Path(__file__).resolve().parent.parent
 
 DEFAULT_WTF = [
     Path("/Applications/World of Warcraft/_retail_/WTF"),
@@ -210,7 +214,7 @@ class LuaParser:
         return items
 
 
-CATEGORIES_LUA = Path(__file__).resolve().parent.parent / "Mariposa" / "Categories.lua"
+CATEGORIES_LUA = REPO / "Mariposa" / "Categories.lua"
 
 
 def load_categories(path: Path = CATEGORIES_LUA) -> dict:
@@ -314,15 +318,28 @@ def export_csv(conn: sqlite3.Connection, path: Path):
 
 
 def gold(copper: int) -> str:
-    return f"{copper / 10000:+,.0f}g"
+    """Signed whole gold, or silver/copper below 1g so postage doesn't read 0g.
+    Same rule as the dashboard's coinParts()."""
+    n = abs(round(copper))
+    sign = "" if n == 0 else ("-" if copper < 0 else "+")
+    if 0 < n < 10000:
+        return f"{sign}{n // 100}s" if n >= 100 else f"{sign}{n}c"
+    return f"{sign}{round(n / 10000):,}g"
+
+
+def summary_start(days: int, now: datetime | None = None) -> int:
+    """Local midnight `days - 1` days ago: the same calendar-day window the
+    dashboard's ranges use, so both report the same totals."""
+    midnight = (now or datetime.now()).replace(hour=0, minute=0, second=0, microsecond=0)
+    return int((midnight - timedelta(days=days - 1)).timestamp())
 
 
 def print_summary(conn: sqlite3.Connection, days: int):
-    since = int(time.time()) - days * 86400
+    since = summary_start(days)
     rows = conn.execute(
         """SELECT category, SUM(amount) FROM transactions WHERE ts >= ?
            GROUP BY category ORDER BY ABS(SUM(amount)) DESC""", (since,)).fetchall()
-    print(f"Last {days} days, all characters")
+    print(("Today" if days == 1 else f"Last {days} days") + ", all characters")
     # Readable labels, in a column wide enough for the longest one, so a long
     # name like "Crafting Commissions" can't push its amount out of line.
     labels = [CATEGORIES.get(c, {}).get("label", c) for c, _ in rows]
@@ -336,14 +353,19 @@ def print_summary(conn: sqlite3.Connection, days: int):
     print(f"  {'Net':<{width}} {gold(net):>14}")
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--wtf", type=Path, help="path to _retail_/WTF (auto-detected if omitted)")
-    ap.add_argument("--db", type=Path, default=Path("mariposa.db"), help="SQLite output (default: mariposa.db)")
+    ap.add_argument("--db", type=Path, default=REPO / "mariposa.db",
+                    help="SQLite output (default: mariposa.db in the repo root)")
     ap.add_argument("--csv", type=Path, help="also export all transactions to this CSV")
     ap.add_argument("--summary", type=int, metavar="DAYS", help="print totals by category for the last DAYS days")
     ap.add_argument("--dashboard", type=Path, metavar="HTML", help="write an offline HTML dashboard")
-    args = ap.parse_args(argv)
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
 
     wtf = args.wtf or next((p for p in DEFAULT_WTF if p.is_dir()), None)
     if not wtf or not wtf.is_dir():
@@ -355,6 +377,7 @@ def main(argv: list[str] | None = None) -> int:
               "Log in with the addon enabled, then /reload or log out.", file=sys.stderr)
         return 1
 
+    print(f"database: {args.db.resolve()}")
     conn = sqlite3.connect(args.db)
     conn.executescript(SCHEMA)
     for account, path in files:

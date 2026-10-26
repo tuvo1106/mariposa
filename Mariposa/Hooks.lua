@@ -8,6 +8,11 @@ local function expect(...)
   ns.Ledger:Expect(...)
 end
 
+-- How long a "claim the next incoming gold" expectation stays open when the
+-- amount is unknown and might be zero. Long enough for the server to answer,
+-- short enough that unrelated gold (a mob's loot) rarely lands inside it.
+local OPEN_CLAIM_TTL = 1.5
+
 -- Repairs ---------------------------------------------------------------------
 
 hooksecurefunc("RepairAllItems", function(useGuildBank)
@@ -16,15 +21,16 @@ end)
 
 -- Reward bags and caches ------------------------------------------------------
 -- Opening one can put gold straight into the wallet with no loot window, which
--- left it in "Other". When an openable item is used, claim the next incoming
--- gold. Skipped at a merchant, where right-clicking an item sells it.
+-- left it in "Other". When an openable item is used, briefly claim the next
+-- incoming gold; many bags hold only items, so the claim must not linger.
+-- Skipped at a merchant, where right-clicking an item sells it.
 
 local function expectContainerGold(bag, slot)
   if MerchantFrame and MerchantFrame:IsShown() then return end
   local info = C_Container.GetContainerItemInfo and C_Container.GetContainerItemInfo(bag, slot)
   if not (info and info.hasLoot) then return end
   local name = info.itemID and C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(info.itemID)
-  expect("container", nil, name, 1)
+  expect("container", nil, name, 1, OPEN_CLAIM_TTL)
 end
 
 if C_Container and C_Container.UseContainerItem then
@@ -95,9 +101,15 @@ end
 
 -- Crafting orders -------------------------------------------------------------
 -- Placing an order deducts the tip (and a listing deposit) immediately; the tip
--- is readable up front. Fulfilling one pays the crafter's commission, whose
--- amount isn't, so claim the next incoming gold. Anything left over (the
+-- is readable up front. Fulfilling one pays the crafter's commission: expect the
+-- exact amount when the claimed order reports it, expect nothing when it's zero,
+-- and otherwise briefly claim the next incoming gold. Anything left over (the
 -- deposit) is caught by the crafting-order window context.
+
+local function commissionFor(order)
+  if type(order) ~= "table" or type(order.tipAmount) ~= "number" then return nil end
+  return order.tipAmount - (order.consortiumCut or 0)
+end
 
 if C_CraftingOrders then
   local place = (C_CraftingOrders.PlaceNewOrder and "PlaceNewOrder")
@@ -110,7 +122,13 @@ if C_CraftingOrders then
   end
   if C_CraftingOrders.FulfillOrder then
     hooksecurefunc(C_CraftingOrders, "FulfillOrder", function()
-      expect("crafting_commission", nil, nil, 1)
+      local commission = C_CraftingOrders.GetClaimedOrder
+        and commissionFor(C_CraftingOrders.GetClaimedOrder())
+      if commission == nil then
+        expect("crafting_commission", nil, nil, 1, OPEN_CLAIM_TTL)
+      elseif commission > 0 then
+        expect("crafting_commission", commission)
+      end
     end)
   end
 end
