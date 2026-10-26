@@ -1,0 +1,52 @@
+# Runs the same checks as lefthook.yml, so they apply even when hooks
+# aren't installed locally.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  luacheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install luacheck
+        run: sudo apt-get update && sudo apt-get install -y lua-check
+      - name: Lint addon
+        run: luacheck Mariposa
+
+  companion-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run unit tests
+        run: python -m unittest discover -s companion/tests
+
+  # PRs are squash-merged, so the title becomes the commit on main and must
+  # follow the same Conventional Commits rule as the commit-msg hook.
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Conventional Commits title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|docs|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9-]+\))?!?: .{1,}'
+          if ! printf '%s' "$TITLE" | grep -qE "$pattern"; then
+            echo "::error::PR title must follow Conventional Commits, e.g. 'fix(addon): subject'. Got: $TITLE"
+            exit 1
+          fi
+          if [ ${#TITLE} -gt 72 ]; then
+            echo "::error::PR title is ${#TITLE} chars; keep it under 72."
+            exit 1
+          fi
