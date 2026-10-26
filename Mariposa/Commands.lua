@@ -1,7 +1,10 @@
 local _, ns = ...
 
-local function startOfToday()
+-- Local midnight `daysAgo` days back. Calendar days, like the dashboard's
+-- ranges; time() normalizes a negative day into the previous month.
+local function startOfDay(daysAgo)
   local d = date("*t")
+  d.day = d.day - (daysAgo or 0)
   d.hour, d.min, d.sec = 0, 0, 0
   return time(d)
 end
@@ -57,25 +60,30 @@ function commands.session()
 end
 
 function commands.today()
-  printSummary("Today, all characters", ns.Ledger:Summarize(startOfToday()))
+  printSummary("Today, all characters", ns.Ledger:Summarize(startOfDay(0)))
 end
 
 function commands.week()
-  printSummary("Last 7 days, all characters", ns.Ledger:Summarize(GetServerTime() - 7 * 86400))
+  printSummary("Last 7 days, all characters", ns.Ledger:Summarize(startOfDay(6)))
 end
 
 function commands.chars()
-  local list, total = {}, 0
+  local list, total, nameCount = {}, 0, {}
   for key, c in pairs(ns.db.chars) do
     list[#list + 1] = { key = key, c = c }
     total = total + (c.gold or 0)
+    local n = c.name or key
+    nameCount[n] = (nameCount[n] or 0) + 1
   end
   table.sort(list, function(a, b) return (a.c.gold or 0) > (b.c.gold or 0) end)
 
   ns.Print("|cffffd100Net worth|r")
   for _, row in ipairs(list) do
+    -- The name alone, plus the realm only when two characters share a name.
+    local label = row.c.name or row.key
+    if nameCount[label] > 1 and row.c.realm then label = label .. " (" .. row.c.realm .. ")" end
     local color = row.c.class and C_ClassColor.GetClassColor(row.c.class)
-    local name = color and color:WrapTextInColorCode(row.key) or row.key
+    local name = color and color:WrapTextInColorCode(label) or label
     print("  " .. name .. "  " .. ns.FormatMoney(row.c.gold))
   end
   local warband = ns.db.warband.gold

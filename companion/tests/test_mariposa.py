@@ -152,5 +152,26 @@ class ResetAwareImportTest(unittest.TestCase):
         self.assertEqual(self.names(), {"Cynze"})
 
 
+class SummaryTest(unittest.TestCase):
+    def test_gold_shows_small_amounts_in_silver_and_copper(self):
+        self.assertEqual(mariposa.gold(-30), "-30c")
+        self.assertEqual(mariposa.gold(2_500), "+25s")
+        self.assertEqual(mariposa.gold(0), "0g")
+        self.assertEqual(mariposa.gold(12_345_678), "+1,235g")
+        self.assertEqual(mariposa.gold(-1_202_000_000), "-120,200g")
+
+    def test_summary_window_starts_at_local_midnight(self):
+        from datetime import datetime
+        now = datetime(2026, 10, 25, 21, 30)
+        self.assertEqual(mariposa.summary_start(1, now), int(datetime(2026, 10, 25).timestamp()))
+        self.assertEqual(mariposa.summary_start(7, now), int(datetime(2026, 10, 19).timestamp()))
+
+    def test_default_db_is_in_the_repo_not_the_current_folder(self):
+        # Regression: a relative default made each working folder its own database.
+        db = mariposa.build_parser().parse_args([]).db
+        self.assertTrue(db.is_absolute())
+        self.assertEqual(db, Path(mariposa.__file__).resolve().parent.parent / "mariposa.db")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -38,7 +38,9 @@ end
 
 -- amount may be nil to claim whatever next arrives in direction `dir`
 -- (e.g. a repair or AH deposit whose cost we can't read up front).
-function Ledger:Expect(cat, amount, ref, dir)
+-- ttl overrides EXPECT_TTL: a claim that might never be paid (a bag with no
+-- gold in it) should expire quickly so it can't capture unrelated money.
+function Ledger:Expect(cat, amount, ref, dir, ttl)
   if amount == 0 then return end
   expectations[#expectations + 1] = {
     cat = cat,
@@ -46,6 +48,7 @@ function Ledger:Expect(cat, amount, ref, dir)
     dir = amount and sign(amount) or dir,
     ref = ref,
     at = GetTime(),
+    ttl = ttl,
   }
 end
 
@@ -65,7 +68,7 @@ function Ledger:Flush()
   local now = GetTime()
   local live = {}
   for _, e in ipairs(expectations) do
-    if now - e.at <= EXPECT_TTL then live[#live + 1] = e end
+    if now - e.at <= (e.ttl or EXPECT_TTL) then live[#live + 1] = e end
   end
 
   -- Exact amounts first, so a quest reward is split out of a combined delta.
