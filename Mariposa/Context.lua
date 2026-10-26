@@ -30,7 +30,7 @@ end
 -- Most specific first: taking mail at a mailbox beside a vendor counts as mail.
 local priority = {
   "loot", "mail", "auction", "trade", "bank", "guildbank",
-  "merchant", "taxi", "transmog", "barber", "trainer",
+  "crafting", "merchant", "taxi", "transmog", "barber", "trainer",
 }
 
 local categoryFor = {
@@ -40,6 +40,9 @@ local categoryFor = {
   trade     = function(d) return d > 0 and "trade_in" or "trade_out" end,
   bank      = function() return "xfer_warband" end,
   guildbank = function() return "guild_bank" end,
+  -- Money earned at the crafting-order kiosk is a commission for fulfilling an
+  -- order; money spent is the tip/deposit for placing one.
+  crafting  = function(d) return d > 0 and "crafting_commission" or "crafting_order" end,
   merchant  = function(d)
     if d < 0 and InRepairMode() then return "repair" end
     return d > 0 and "vendor_sell" or "vendor_buy"
@@ -77,6 +80,7 @@ mapInteraction("Trainer", "trainer")
 mapInteraction("GuildBanker", "guildbank")
 mapInteraction("Banker", "bank")
 mapInteraction("AccountBanker", "bank")
+mapInteraction("CraftingOrders", "crafting")
 
 function Context:OnInteraction(interactionType, isOpen)
   local ctx = interactions[interactionType]
