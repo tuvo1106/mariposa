@@ -101,6 +101,8 @@ Context.openEvents = {
   TRAINER_SHOW = "trainer",
   GUILDBANKFRAME_OPENED = "guildbank",
   BANKFRAME_OPENED = "bank",
+  CRAFTINGORDERS_SHOW_CRAFTER = "crafting",
+  CRAFTINGORDERS_SHOW_CUSTOMER = "crafting",
   LOOT_OPENED = "loot",
 }
 
@@ -115,5 +117,7 @@ Context.closeEvents = {
   TRAINER_CLOSED = "trainer",
   GUILDBANKFRAME_CLOSED = "guildbank",
   BANKFRAME_CLOSED = "bank",
+  CRAFTINGORDERS_HIDE_CRAFTER = "crafting",
+  CRAFTINGORDERS_HIDE_CUSTOMER = "crafting",
   LOOT_CLOSED = "loot",
 }
