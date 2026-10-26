@@ -31,13 +31,27 @@ local function initDB()
   end
 end
 
+local function canViewAccountBank()
+  -- CanViewBank reports whether the account bank is currently loaded. Looked up
+  -- defensively so a missing API on older clients doesn't error.
+  if C_Bank.CanViewBank then
+    local ok, can = pcall(C_Bank.CanViewBank, Enum.BankType.Account)
+    if ok then return can end
+  end
+  return false
+end
+
 local function snapshotWarband()
   if not (C_Bank and C_Bank.FetchDepositedMoney and Enum.BankType and Enum.BankType.Account) then return end
   local gold = C_Bank.FetchDepositedMoney(Enum.BankType.Account)
-  if gold then
-    ns.db.warband.gold = gold
-    ns.db.warband.updated = GetServerTime()
-  end
+  if not gold then return end
+  -- FetchDepositedMoney only returns a live figure while the account bank is
+  -- loaded (at a banker). Elsewhere -- notably at logout -- it reports 0, which
+  -- must not clobber the balance captured at the bank. A 0 is only trusted when
+  -- the bank is actually viewable, i.e. a genuinely empty warband bank.
+  if gold == 0 and not canViewAccountBank() then return end
+  ns.db.warband.gold = gold
+  ns.db.warband.updated = GetServerTime()
 end
 
 local handlers = {}
