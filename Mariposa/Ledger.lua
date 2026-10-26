@@ -19,11 +19,12 @@ local function sign(n)
   return n > 0 and 1 or (n < 0 and -1 or 0)
 end
 
+-- Returns the recorded transaction, so callers can attach extra fields.
 function Ledger:Record(cat, amount, ref)
   if amount == 0 then return end
   local c = ns.char
   c.seq = c.seq + 1
-  c.tx[#c.tx + 1] = {
+  local tx = {
     s = c.seq,
     t = GetServerTime(),
     a = amount,
@@ -31,9 +32,11 @@ function Ledger:Record(cat, amount, ref)
     r = ref,
     m = C_Map.GetBestMapForUnit("player"),
   }
+  c.tx[#c.tx + 1] = tx
   if ns.db.settings.debug then
     ns.Print(ns.FormatMoney(amount, true), ns.CategoryLabel(cat), ref and ("(" .. tostring(ref) .. ")") or "")
   end
+  return tx
 end
 
 -- amount may be nil to claim whatever next arrives in direction `dir`

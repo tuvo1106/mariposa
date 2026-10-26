@@ -2,14 +2,25 @@ local _, ns = ...
 
 -- Loaded last: wires events to the modules defined in the other files.
 
-local DB_VERSION = 1
+-- 2: adds installId, and adjustments carry `p` (when the character was last
+-- seen on this computer). Older data simply lacks both; nothing is rewritten.
+local DB_VERSION = 2
 
 local frame = CreateFrame("Frame")
+
+-- Identifies this copy of the SavedVariables. The companion merges ledgers from
+-- several computers, and each numbers its transactions independently, so it
+-- needs to know which computer a ledger came from.
+local function newInstallId()
+  return string.format("%x-%04x", GetServerTime(), math.random(0, 0xffff))
+end
 
 local function initDB()
   MariposaDB = MariposaDB or {}
   local db = MariposaDB
   db.version = db.version or DB_VERSION
+  db.installId = db.installId or newInstallId()  -- v1 -> v2: the only migration step
+  if db.version < DB_VERSION then db.version = DB_VERSION end
   db.settings = db.settings or { debug = false }
   db.chars = db.chars or {}
   db.warband = db.warband or {}
@@ -61,9 +72,13 @@ function handlers.PLAYER_LOGIN()
   local money = GetMoney()
   local c = ns.char
   if c.gold and c.gold ~= money then
-    -- Gold moved while we weren't watching (addon disabled, or a crash lost
-    -- the last session's SavedVariables). Book it so balances reconcile.
-    ns.Ledger:Record("adjustment", money - c.gold)
+    -- Gold moved while we weren't watching (addon disabled, a crash lost the
+    -- last session's SavedVariables, or the character was played on another
+    -- computer). Book it so balances reconcile, noting when this computer last
+    -- saw the character: the companion drops whatever part of the adjustment
+    -- another computer's ledger explains for that gap.
+    local tx = ns.Ledger:Record("adjustment", money - c.gold)
+    if tx then tx.p = c.lastSeen end
   end
   c.gold = money
   c.lastSeen = GetServerTime()

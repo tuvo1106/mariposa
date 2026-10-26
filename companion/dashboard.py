@@ -44,8 +44,8 @@ def dashboard_data(conn: sqlite3.Connection, categories: dict) -> dict:
     tx = []
     for key, account, ts, amount, category, ref in conn.execute(
             """SELECT t.char_key, c.account, t.ts, t.amount, t.category, t.ref
-               FROM transactions t JOIN characters c USING (char_key)
-               ORDER BY t.ts, t.char_key, t.seq"""):
+               FROM ledger t JOIN characters c USING (char_key)
+               ORDER BY t.ts, t.char_key, t.source, t.seq"""):
         tx.append([index[key], ts, amount, category, ref])
         if category == "xfer_warband" and account in warband_index:
             tx.append([warband_index[account], ts, -amount, category, pockets[index[key]]["name"]])

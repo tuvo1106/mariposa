@@ -173,5 +173,174 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(db, Path(mariposa.__file__).resolve().parent.parent / "mariposa.db")
 
 
+def char_data(txs, *, gold, last_seen, name="Cynze"):
+    """A character entry: txs are (seq, ts, amount, category[, prev_seen])."""
+    tx = []
+    for s, t, a, k, *p in txs:
+        entry = {"s": s, "t": t, "a": a, "k": k}
+        if p:
+            entry["p"] = p[0]
+        tx.append(entry)
+    return {"name": name, "realm": "Wyrmrest Accord", "class": "WARLOCK", "faction": "Horde",
+            "level": 90, "gold": gold, "lastSeen": last_seen,
+            "seq": max((s for s, *_ in txs), default=0), "tx": tx}
+
+
+def install_file(install_id, chars, warband=None):
+    db = {"chars": chars}
+    if install_id:
+        db["installId"] = install_id
+    if warband:
+        db["warband"] = warband
+    return {"MariposaDB": db}
+
+
+class MultiComputerTest(unittest.TestCase):
+    """The same character played on two computers: each keeps its own ledger,
+    and a login on one books the other's activity as an adjustment."""
+
+    KEY = "Cynze-WyrmrestAccord"
+
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        mariposa.init_schema(self.conn)
+
+    def run_import(self, *files):
+        listed = set()
+        for i, data in enumerate(files):
+            _, chars = mariposa.import_file(self.conn, "ACCT", data, mariposa.source_id(data, f"file:{i}"))
+            listed |= chars
+        mariposa.reconcile(self.conn, listed)
+
+    def ledger(self):
+        return self.conn.execute("SELECT category, amount FROM ledger ORDER BY ts").fetchall()
+
+    def desktop(self, adjustment=2000):
+        # Played here, then on the laptop, then logged in here again at t=400.
+        return install_file("desk", {self.KEY: char_data(
+            [(1, 100, 500, "loot"), (2, 400, adjustment, "adjustment", 150)],
+            gold=10_500 + adjustment, last_seen=400)})
+
+    def laptop(self):
+        return install_file("lap", {self.KEY: char_data(
+            [(1, 200, 1200, "quest"), (2, 250, 800, "vendor_sell")], gold=12_500, last_seen=300)})
+
+    def test_adjustment_explained_by_other_computer_is_dropped(self):
+        self.run_import(self.desktop(), self.laptop())
+        self.assertEqual(self.ledger(), [("loot", 500), ("quest", 1200), ("vendor_sell", 800)])
+
+    def test_partly_explained_adjustment_keeps_the_rest(self):
+        # 3000 moved while away, but the laptop only recorded 2000 of it.
+        self.run_import(self.desktop(adjustment=3000), self.laptop())
+        self.assertIn(("adjustment", 1000), self.ledger())
+
+    def test_import_order_and_repeats_do_not_matter(self):
+        self.run_import(self.laptop(), self.desktop())
+        self.run_import(self.desktop(), self.laptop())
+        self.assertEqual(len(self.ledger()), 3)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0], 4)
+
+    def test_same_seq_on_two_computers_is_not_a_reset(self):
+        self.run_import(self.desktop(), self.laptop())
+        self.run_import(self.desktop())
+        self.assertEqual(self.conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE source = 'lap'").fetchone()[0], 2)
+
+    def test_balance_comes_from_the_computer_that_saw_it_last(self):
+        self.run_import(self.desktop(), self.laptop())
+        self.assertEqual(self.conn.execute("SELECT gold FROM characters").fetchone()[0], 12_500)
+
+    def test_newest_warband_snapshot_wins(self):
+        old = install_file("lap", {}, {"gold": 1, "updated": 100})
+        new = install_file("desk", {}, {"gold": 2, "updated": 200})
+        self.run_import(new, old)
+        self.assertEqual(self.conn.execute("SELECT gold FROM warband").fetchone()[0], 2)
+
+    def test_adjustment_without_prev_seen_is_clamped(self):
+        # Older addon versions don't record when the character was last seen.
+        desk = install_file("desk", {self.KEY: char_data(
+            [(1, 100, 500, "loot"), (2, 400, 1500, "adjustment")], gold=12_000, last_seen=400)})
+        self.run_import(desk, self.laptop())
+        # The laptop's 2000 covers more than the 1500 adjustment; it's capped, not flipped.
+        self.assertNotIn("adjustment", [k for k, _ in self.ledger()])
+
+    def test_v0_database_is_migrated_without_duplicates(self):
+        conn = sqlite3.connect(":memory:")
+        conn.executescript("""
+            CREATE TABLE transactions (char_key TEXT NOT NULL, seq INTEGER NOT NULL, ts INTEGER NOT NULL,
+                amount INTEGER NOT NULL, category TEXT NOT NULL, ref TEXT, map_id INTEGER,
+                PRIMARY KEY (char_key, seq));
+            INSERT INTO transactions VALUES ('Cynze-WyrmrestAccord', 1, 100, 500, 'loot', NULL, NULL);
+        """)
+        mariposa.init_schema(conn)
+        self.assertEqual(conn.execute("SELECT source FROM transactions").fetchall(), [("",)])
+        self.conn = conn
+        self.run_import(self.desktop())
+        self.assertEqual(conn.execute(
+            "SELECT source, COUNT(*) FROM transactions GROUP BY source").fetchall(), [("desk", 2)])
+
+
+class FindImportsTest(unittest.TestCase):
+    def test_accounts_from_subfolders_or_the_single_local_account(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "OTHER").mkdir()
+            (root / "laptop.lua").write_text("MariposaDB = {}")
+            (root / "OTHER" / "x.lua").write_text("MariposaDB = {}")
+            found = {(a, p.name) for a, p in mariposa.find_imports(root, ["MAIN"])}
+            self.assertEqual(found, {("MAIN", "laptop.lua"), ("OTHER", "x.lua")})
+            # With two local accounts, a loose file is ambiguous and skipped.
+            loose = [p.name for _, p in mariposa.find_imports(root, ["A", "B"])]
+            self.assertEqual(loose, ["x.lua"])
+
+    def test_missing_folder_is_empty(self):
+        self.assertEqual(mariposa.find_imports(Path("does-not-exist"), ["MAIN"]), [])
+
+
+class MainImportsTest(unittest.TestCase):
+    """main() reads the local WTF plus an imports folder, but an explicit --wtf
+    alone must not pick up the default imports folder."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        sv = root / "WTF" / "Account" / "MAIN" / "SavedVariables"
+        sv.mkdir(parents=True)
+        (sv / "Mariposa.lua").write_text(
+            'MariposaDB = { ["installId"] = "desk", ["chars"] = { ["Here-Realm"] = '
+            '{ ["name"] = "Here", ["gold"] = 1, ["lastSeen"] = 1, ["seq"] = 0, ["tx"] = {} } } }')
+        self.imports = root / "imports"
+        self.imports.mkdir()
+        (self.imports / "laptop.lua").write_text(
+            'MariposaDB = { ["installId"] = "lap", ["chars"] = { ["There-Realm"] = '
+            '{ ["name"] = "There", ["gold"] = 2, ["lastSeen"] = 2, ["seq"] = 0, ["tx"] = {} } } }')
+        self.root = root
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def names(self, db):
+        from contextlib import closing
+        with closing(sqlite3.connect(db)) as conn:
+            return {r[0] for r in conn.execute("SELECT name FROM characters")}
+
+    def test_imports_folder_is_merged(self):
+        db = self.root / "a.db"
+        mariposa.main(["--wtf", str(self.root / "WTF"), "--imports", str(self.imports), "--db", str(db)])
+        self.assertEqual(self.names(db), {"Here", "There"})
+
+    def test_explicit_wtf_ignores_default_imports(self):
+        db = self.root / "b.db"
+        saved = mariposa.IMPORTS
+        mariposa.IMPORTS = self.imports
+        try:
+            mariposa.main(["--wtf", str(self.root / "WTF"), "--db", str(db)])
+        finally:
+            mariposa.IMPORTS = saved
+        self.assertEqual(self.names(db), {"Here"})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -2,10 +2,14 @@
 """Import Mariposa SavedVariables into SQLite for offline dashboards.
 
 The game only writes SavedVariables on logout or /reload, so run this after
-either. Imports are idempotent: transactions are keyed by (character, seq).
-A character whose in-game ledger was reset (deleted and recreated, so its seq
-counter restarts) is detected and its stale rows are replaced, so reused seq
-numbers don't leave old transactions behind.
+either. Imports are idempotent: transactions are keyed by (character, source,
+seq), where source is the install that recorded them. A character whose
+in-game ledger was reset (deleted and recreated, so its seq counter restarts)
+is detected and its stale rows are replaced.
+
+Playing on several computers: copy each other computer's Mariposa.lua into
+imports/ (see find_imports). Their ledgers are merged, and login adjustments
+that another computer's ledger explains are dropped (see reconcile).
 
     python3 mariposa.py                    # auto-detect WoW, write <repo>/mariposa.db
     python3 mariposa.py --wtf PATH --db out.db --csv out.csv
@@ -19,18 +23,22 @@ import csv
 import re
 import sqlite3
 import sys
+from contextlib import closing
 from datetime import datetime, timedelta
 from pathlib import Path
 
 # The repo root. Defaults hang off it rather than the current folder, so the
 # importer finds the same database no matter where it's run from.
 REPO = Path(__file__).resolve().parent.parent
+IMPORTS = REPO / "imports"
 
 DEFAULT_WTF = [
     Path("/Applications/World of Warcraft/_retail_/WTF"),
     Path(r"C:\Program Files (x86)\World of Warcraft\_retail_\WTF"),
     Path(r"C:\Program Files\World of Warcraft\_retail_\WTF"),
 ]
+
+SCHEMA_VERSION = 1
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS characters (
@@ -45,14 +53,17 @@ CREATE TABLE IF NOT EXISTS characters (
     last_seen INTEGER
 );
 CREATE TABLE IF NOT EXISTS transactions (
-    char_key TEXT    NOT NULL,
-    seq      INTEGER NOT NULL,
-    ts       INTEGER NOT NULL,
-    amount   INTEGER NOT NULL,  -- copper; negative = spent
-    category TEXT    NOT NULL,
-    ref      TEXT,
-    map_id   INTEGER,
-    PRIMARY KEY (char_key, seq)
+    char_key  TEXT    NOT NULL,
+    source    TEXT    NOT NULL,  -- the install that recorded it ('' = before sources existed)
+    seq       INTEGER NOT NULL,
+    ts        INTEGER NOT NULL,
+    amount    INTEGER NOT NULL,  -- copper; negative = spent
+    category  TEXT    NOT NULL,
+    ref       TEXT,
+    map_id    INTEGER,
+    prev_seen INTEGER,           -- adjustments: when this install last saw the character
+    explained INTEGER NOT NULL DEFAULT 0,  -- adjustments: part another install's ledger shows
+    PRIMARY KEY (char_key, source, seq)
 );
 CREATE INDEX IF NOT EXISTS transactions_ts ON transactions (ts);
 CREATE TABLE IF NOT EXISTS warband (
@@ -60,8 +71,35 @@ CREATE TABLE IF NOT EXISTS warband (
     gold    INTEGER,
     updated INTEGER
 );
+-- What every report reads: adjustments net of what other installs explain,
+-- dropping those that are fully explained.
+CREATE VIEW IF NOT EXISTS ledger AS
+    SELECT char_key, source, seq, ts, amount - explained AS amount, category, ref, map_id
+    FROM transactions WHERE amount - explained != 0;
 """
 
+
+def init_schema(conn: sqlite3.Connection) -> None:
+    """Create the schema, migrating an older database in place: it's the
+    durable history (ADR 0003), so it's never rebuilt."""
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    has_tx = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'transactions'").fetchone()
+    if has_tx and version < 1:
+        # v0 keyed transactions by (char_key, seq) alone. Keep every row under a
+        # blank source; the next import of the file they came from claims them,
+        # since an identical transaction is the same one wherever it's filed.
+        conn.executescript("""
+            DROP INDEX IF EXISTS transactions_ts;
+            ALTER TABLE transactions RENAME TO transactions_v0;
+        """)
+        conn.executescript(SCHEMA)
+        conn.execute("""INSERT INTO transactions (char_key, source, seq, ts, amount, category, ref, map_id)
+                        SELECT char_key, '', seq, ts, amount, category, ref, map_id FROM transactions_v0""")
+        conn.execute("DROP TABLE transactions_v0")
+    conn.executescript(SCHEMA)
+    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    conn.commit()
 
 
 class LuaParseError(ValueError):
@@ -240,80 +278,168 @@ def find_saved_variables(wtf: Path) -> list[tuple[str, Path]]:
             for p in sorted(wtf.glob("Account/*/SavedVariables/Mariposa.lua"))]
 
 
-def import_db(conn: sqlite3.Connection, account: str, data: dict) -> int:
-    """Upsert one account's MariposaDB; return the number of new transactions."""
+def find_imports(folder: Path, local_accounts: list[str]) -> list[tuple[str, Path]]:
+    """(account, file) for Mariposa.lua files copied from other computers.
+
+    A file inside a subfolder belongs to the account the subfolder is named
+    after (imports/PHOSHIZZZ0/laptop.lua). A file directly in imports/ belongs
+    to the one local account; with several local accounts it must go in a
+    subfolder, since a SavedVariables file doesn't name its account."""
+    if not folder.is_dir():
+        return []
+    found = []
+    for path in sorted(folder.rglob("*.lua")):
+        rel = path.relative_to(folder)
+        if len(rel.parts) > 1:
+            found.append((rel.parts[0], path))
+        elif len(local_accounts) == 1:
+            found.append((local_accounts[0], path))
+        else:
+            print(f"skipping {path}: put it in a subfolder named after its WoW account "
+                  f"({', '.join(local_accounts) or 'none found locally'})", file=sys.stderr)
+    return found
+
+
+def source_id(data: dict, fallback: str) -> str:
+    """The install that wrote this file. Files from addon versions before
+    installId existed fall back to where they were read from."""
+    install = (data.get("MariposaDB") or {}).get("installId")
+    return str(install) if install else fallback
+
+
+def import_file(conn: sqlite3.Connection, account: str, data: dict, source: str) -> tuple[int, set[str]]:
+    """Upsert one file's ledgers under `source`. Returns (new transactions,
+    characters the file lists). Call reconcile() after the last file."""
     db = data.get("MariposaDB") or {}
+    chars = db.get("chars") or {}
     new_tx = 0
-    for char_key, c in (db.get("chars") or {}).items():
+    for char_key, c in chars.items():
+        # One row per character: keep whichever install saw it most recently.
         conn.execute(
             """INSERT INTO characters VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(char_key) DO UPDATE SET
                  account=excluded.account, name=excluded.name, realm=excluded.realm,
                  class=excluded.class, faction=excluded.faction, level=excluded.level,
-                 gold=excluded.gold, last_seen=excluded.last_seen""",
+                 gold=excluded.gold, last_seen=excluded.last_seen
+               WHERE COALESCE(excluded.last_seen, 0) >= COALESCE(characters.last_seen, 0)""",
             (char_key, account, c.get("name"), c.get("realm"), c.get("class"),
              c.get("faction"), c.get("level"), c.get("gold"), c.get("lastSeen")),
         )
         incoming = []
         for tx in c.get("tx") or []:
             ref = tx.get("r")
-            incoming.append((char_key, tx["s"], tx["t"], tx["a"], tx["k"],
-                             None if ref is None else str(ref), tx.get("m")))
+            incoming.append((char_key, source, tx["s"], tx["t"], tx["a"], tx["k"],
+                             None if ref is None else str(ref), tx.get("m"), tx.get("p")))
+
+        # The same transaction filed under another source is this one: a file
+        # imported before its install had an ID, or under another name. Claim it.
+        claimed = 0
+        for r in incoming:
+            claimed += conn.execute(
+                """DELETE FROM transactions WHERE char_key = ? AND source != ?
+                   AND seq = ? AND ts = ? AND amount = ? AND category = ?""",
+                (char_key, source, r[2], r[3], r[4], r[5])).rowcount
 
         # The in-game ledger is append-only, so stored rows must still be present
         # with identical content. Two things prove a reset (the character was
         # deleted and recreated, restarting its seq counter): the live seq
         # counter dropped below a seq we've stored, or an overlapping seq now
         # holds a different transaction. Either way the stored rows are stale, so
-        # replace this character's ledger wholesale. (Pruning low seqs wouldn't
-        # trip this: the counter keeps climbing and overlapping content matches.)
+        # replace this source's ledger for the character wholesale. (Pruning low
+        # seqs wouldn't trip this: the counter climbs and overlaps match.)
         stored = {row[0]: (row[1], row[2], row[3]) for row in conn.execute(
-            "SELECT seq, ts, amount, category FROM transactions WHERE char_key = ?", (char_key,))}
+            "SELECT seq, ts, amount, category FROM transactions WHERE char_key = ? AND source = ?",
+            (char_key, source))}
         counter = c.get("seq") or 0
         reset = (bool(stored) and counter < max(stored)) or any(
-            r[1] in stored and stored[r[1]] != (r[2], r[3], r[4]) for r in incoming)
+            r[2] in stored and stored[r[2]] != (r[3], r[4], r[5]) for r in incoming)
 
+        insert = """INSERT {} INTO transactions
+                    (char_key, source, seq, ts, amount, category, ref, map_id, prev_seen)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+        before = conn.total_changes
         if reset:
-            conn.execute("DELETE FROM transactions WHERE char_key = ?", (char_key,))
-            conn.executemany("INSERT INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?)", incoming)
-            new_tx += len(incoming)
-        else:
+            conn.execute("DELETE FROM transactions WHERE char_key = ? AND source = ?", (char_key, source))
             before = conn.total_changes
-            conn.executemany("INSERT OR IGNORE INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?)", incoming)
-            new_tx += conn.total_changes - before
+            conn.executemany(insert.format(""), incoming)
+        else:
+            conn.executemany(insert.format("OR IGNORE"), incoming)
+        new_tx += conn.total_changes - before - claimed
 
-    # Drop characters this account no longer has: they were deleted in-game, so
-    # the mirror drops them and their ledgers too. Scoped to the account, and
-    # skipped when the file lists no characters at all, so a truncated or empty
-    # read can't wipe the database.
-    incoming_keys = list((db.get("chars") or {}).keys())
-    if incoming_keys:
-        placeholders = ",".join("?" * len(incoming_keys))
-        gone = [k for (k,) in conn.execute(
-            f"SELECT char_key FROM characters WHERE account = ? AND char_key NOT IN ({placeholders})",
-            (account, *incoming_keys))]
-        for k in gone:
-            conn.execute("DELETE FROM transactions WHERE char_key = ?", (k,))
-            conn.execute("DELETE FROM characters WHERE char_key = ?", (k,))
+    # Characters this file no longer lists were deleted on that install; drop
+    # that install's ledgers for them. Skipped for a file that lists none, so a
+    # truncated read can't wipe anything.
+    if chars:
+        placeholders = ",".join("?" * len(chars))
+        conn.execute(f"DELETE FROM transactions WHERE source = ? AND char_key NOT IN ({placeholders})",
+                     (source, *chars))
 
+    # One warband bank per account: keep the most recent snapshot.
     warband = db.get("warband") or {}
     if "gold" in warband:
         conn.execute(
             """INSERT INTO warband VALUES (?, ?, ?)
-               ON CONFLICT(account) DO UPDATE SET gold=excluded.gold, updated=excluded.updated""",
+               ON CONFLICT(account) DO UPDATE SET gold=excluded.gold, updated=excluded.updated
+               WHERE COALESCE(excluded.updated, 0) >= COALESCE(warband.updated, 0)""",
             (account, warband["gold"], warband.get("updated")),
         )
+    return new_tx, set(chars)
+
+
+def reconcile(conn: sqlite3.Connection, listed: set[str]) -> None:
+    """Finish an import run across every file read in it.
+
+    - Drops characters no file lists that have no transactions left.
+    - Works out how much of each login adjustment another install explains.
+      Playing a character on another computer moves its gold; the next login
+      here books the difference as an adjustment, while the other computer
+      recorded the same money in detail. So an adjustment is net of every
+      other install's transactions for that character in the gap it covers:
+      after this install last saw the character, up to the login."""
+    if listed:
+        placeholders = ",".join("?" * len(listed))
+        conn.execute(
+            f"""DELETE FROM characters WHERE char_key NOT IN ({placeholders})
+                AND char_key NOT IN (SELECT char_key FROM transactions)""", tuple(listed))
+
+    conn.execute("UPDATE transactions SET explained = 0")
+    adjustments = conn.execute(
+        """SELECT char_key, source, seq, ts, amount, prev_seen FROM transactions
+           WHERE category = 'adjustment'""").fetchall()
+    for key, src, seq, ts, amount, prev in adjustments:
+        exact = prev is not None
+        if not exact:
+            # Older files don't record it: start after this install's previous
+            # transaction for the character, which may be early, hence the clamp below.
+            prev = conn.execute(
+                "SELECT MAX(ts) FROM transactions WHERE char_key = ? AND source = ? AND ts < ?",
+                (key, src, ts)).fetchone()[0] or 0
+        other = conn.execute(
+            """SELECT COALESCE(SUM(amount), 0) FROM transactions
+               WHERE char_key = ? AND source NOT IN (?, '') AND category != 'adjustment'
+                 AND ts > ? AND ts <= ?""", (key, src, prev, ts)).fetchone()[0]
+        if not exact:
+            other = max(0, min(other, amount)) if amount > 0 else min(0, max(other, amount))
+        if other:
+            conn.execute("UPDATE transactions SET explained = ? WHERE char_key = ? AND source = ? AND seq = ?",
+                         (other, key, src, seq))
     conn.commit()
+
+
+def import_db(conn: sqlite3.Connection, account: str, data: dict, source: str | None = None) -> int:
+    """Import a single file and reconcile; returns the number of new transactions."""
+    new_tx, listed = import_file(conn, account, data, source or source_id(data, f"wtf:{account}"))
+    reconcile(conn, listed)
     return new_tx
 
 
 def export_csv(conn: sqlite3.Connection, path: Path):
     rows = conn.execute(
-        """SELECT datetime(ts, 'unixepoch', 'localtime'), char_key, category, amount, ref, map_id
-           FROM transactions ORDER BY ts, char_key, seq""")
+        """SELECT datetime(ts, 'unixepoch', 'localtime'), char_key, category, amount, ref, map_id, source
+           FROM ledger ORDER BY ts, char_key, source, seq""")
     with path.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["time", "character", "category", "copper", "ref", "map_id"])
+        w.writerow(["time", "character", "category", "copper", "ref", "map_id", "source"])
         w.writerows(rows)
 
 
@@ -337,7 +463,7 @@ def summary_start(days: int, now: datetime | None = None) -> int:
 def print_summary(conn: sqlite3.Connection, days: int):
     since = summary_start(days)
     rows = conn.execute(
-        """SELECT category, SUM(amount) FROM transactions WHERE ts >= ?
+        """SELECT category, SUM(amount) FROM ledger WHERE ts >= ?
            GROUP BY category ORDER BY ABS(SUM(amount)) DESC""", (since,)).fetchall()
     print(("Today" if days == 1 else f"Last {days} days") + ", all characters")
     # Readable labels, in a column wide enough for the longest one, so a long
@@ -358,6 +484,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--wtf", type=Path, help="path to _retail_/WTF (auto-detected if omitted)")
     ap.add_argument("--db", type=Path, default=REPO / "mariposa.db",
                     help="SQLite output (default: mariposa.db in the repo root)")
+    ap.add_argument("--imports", type=Path,
+                    help="folder of Mariposa.lua files copied from other computers "
+                         "(default: imports in the repo root, unless --wtf is given)")
     ap.add_argument("--csv", type=Path, help="also export all transactions to this CSV")
     ap.add_argument("--summary", type=int, metavar="DAYS", help="print totals by category for the last DAYS days")
     ap.add_argument("--dashboard", type=Path, metavar="HTML", help="write an offline HTML dashboard")
@@ -368,30 +497,40 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     wtf = args.wtf or next((p for p in DEFAULT_WTF if p.is_dir()), None)
-    if not wtf or not wtf.is_dir():
-        print("Couldn't find your WTF folder; pass --wtf PATH.", file=sys.stderr)
-        return 1
-    files = find_saved_variables(wtf)
-    if not files:
-        print(f"No Mariposa.lua under {wtf}/Account/*/SavedVariables. "
+    local = find_saved_variables(wtf) if wtf and wtf.is_dir() else []
+    # An explicit --wtf (synthetic data, say) reads only what it's pointed at,
+    # so the default imports folder doesn't leak real data into it.
+    imports = args.imports or (None if args.wtf else IMPORTS)
+    imported = find_imports(imports, [account for account, _ in local]) if imports else []
+    if not local and not imported:
+        where = f"{wtf}/Account/*/SavedVariables" if wtf and wtf.is_dir() else "a WTF folder (pass --wtf PATH)"
+        print(f"No Mariposa.lua under {where}" + (f", and none in {imports}" if imports else "") + ". "
               "Log in with the addon enabled, then /reload or log out.", file=sys.stderr)
         return 1
 
     print(f"database: {args.db.resolve()}")
-    conn = sqlite3.connect(args.db)
-    conn.executescript(SCHEMA)
-    for account, path in files:
-        new_tx = import_db(conn, account, parse_saved_variables(path))
-        print(f"{account}: {new_tx} new transactions")
-    if args.csv:
-        export_csv(conn, args.csv)
-        print(f"wrote {args.csv}")
-    if args.summary:
-        print_summary(conn, args.summary)
-    if args.dashboard:
-        from dashboard import render_dashboard
-        render_dashboard(conn, args.dashboard, CATEGORIES)
-        print(f"wrote {args.dashboard}")
+    inputs = [(account, path, f"wtf:{account}", "this computer") for account, path in local]
+    inputs += [(account, path, f"file:{path.relative_to(imports).as_posix()}",
+                f"imports/{path.relative_to(imports).as_posix()}") for account, path in imported]
+    # Closed explicitly: on Windows an open connection keeps the file locked.
+    with closing(sqlite3.connect(args.db)) as conn:
+        init_schema(conn)
+        listed: set[str] = set()
+        for account, path, fallback, label in inputs:
+            data = parse_saved_variables(path)
+            new_tx, chars = import_file(conn, account, data, source_id(data, fallback))
+            listed |= chars
+            print(f"{label} ({account}): {new_tx} new transactions")
+        reconcile(conn, listed)
+        if args.csv:
+            export_csv(conn, args.csv)
+            print(f"wrote {args.csv}")
+        if args.summary:
+            print_summary(conn, args.summary)
+        if args.dashboard:
+            from dashboard import render_dashboard
+            render_dashboard(conn, args.dashboard, CATEGORIES)
+            print(f"wrote {args.dashboard}")
     return 0
 
 
