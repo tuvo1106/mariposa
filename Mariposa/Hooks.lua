@@ -14,6 +14,23 @@ hooksecurefunc("RepairAllItems", function(useGuildBank)
   if not useGuildBank then expect("repair", nil, nil, -1) end
 end)
 
+-- Reward bags and caches ------------------------------------------------------
+-- Opening one can put gold straight into the wallet with no loot window, which
+-- left it in "Other". When an openable item is used, claim the next incoming
+-- gold. Skipped at a merchant, where right-clicking an item sells it.
+
+local function expectContainerGold(bag, slot)
+  if MerchantFrame and MerchantFrame:IsShown() then return end
+  local info = C_Container.GetContainerItemInfo and C_Container.GetContainerItemInfo(bag, slot)
+  if not (info and info.hasLoot) then return end
+  local name = info.itemID and C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(info.itemID)
+  expect("container", nil, name, 1)
+end
+
+if C_Container and C_Container.UseContainerItem then
+  hooksecurefunc(C_Container, "UseContainerItem", expectContainerGold)
+end
+
 -- Auction house ---------------------------------------------------------------
 
 if C_AuctionHouse then
