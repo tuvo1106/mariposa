@@ -1,5 +1,7 @@
 std = "lua51"
 max_line_length = 120
+-- Methods defined with `:` don't always use self; that's not a bug.
+self = false
 exclude_files = { "companion/**" }
 
 globals = { "MariposaDB", "SLASH_MARIPOSA1", "SLASH_MARIPOSA2", "SlashCmdList" }
