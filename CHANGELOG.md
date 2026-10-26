@@ -31,7 +31,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   buttons are red. Amounts show coin icons, characters show in their class colors, and the
   tooltip is styled like the game's. It's dark only, like the game, so the light/dark
   toggle is gone.
-- Companion: --summary prints category names instead of internal keys, in a column wide
+- Companion: `--summary` prints category names instead of internal keys, in a column wide
   enough for the longest one.
 
 ### Fixed
