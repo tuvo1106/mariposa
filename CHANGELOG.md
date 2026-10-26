@@ -21,6 +21,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Dashboard: a search box filters the ledger, and Export CSV downloads the filtered ledger.
 - Dashboard: a 1-day range that charts today hour by hour and compares it with the same
   time yesterday.
+- Addon: gold from opening reward bags and caches, such as Prey hunt rewards, is tracked as
+  Reward Bags instead of Other.
 
 ### Changed
 
