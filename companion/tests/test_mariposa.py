@@ -74,5 +74,83 @@ class ImportTest(unittest.TestCase):
         )
 
 
+class ResetAwareImportTest(unittest.TestCase):
+    """A character whose in-game ledger is reset reuses seq numbers; the import
+    must replace the stale rows rather than keep them (INSERT OR IGNORE would)."""
+
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.executescript(mariposa.SCHEMA)
+
+    def data(self, txs, *, seq=None, gold=100):
+        # txs: list of (s, t, a, k). seq defaults to the highest s present.
+        tx = [{"s": s, "t": t, "a": a, "k": k} for (s, t, a, k) in txs]
+        counter = seq if seq is not None else max((s for s, *_ in txs), default=0)
+        return {"MariposaDB": {"chars": {"Cynze-WyrmrestAccord": {
+            "name": "Cynze", "realm": "Wyrmrest Accord", "class": "WARLOCK",
+            "faction": "Horde", "level": 90, "gold": gold, "lastSeen": 100, "seq": counter,
+            "tx": tx}}}}
+
+    def kinds(self):
+        return [r[0] for r in self.conn.execute(
+            "SELECT category FROM transactions ORDER BY seq")]
+
+    def imp(self, data):
+        return mariposa.import_db(self.conn, "ACCT", data)
+
+    def test_append_keeps_history(self):
+        self.assertEqual(self.imp(self.data([(1, 10, 5, "loot"), (2, 20, 5, "loot")])), 2)
+        # Same two plus a new third: only the new one counts, nothing is replaced.
+        self.assertEqual(self.imp(self.data(
+            [(1, 10, 5, "loot"), (2, 20, 5, "loot"), (3, 30, 5, "quest")])), 1)
+        self.assertEqual(self.kinds(), ["loot", "loot", "quest"])
+
+    def test_reset_shorter_ledger_replaces(self):
+        self.imp(self.data([(1, 10, 5, "loot"), (2, 20, 5, "loot"), (3, 30, 5, "loot")]))
+        # Deleted and recreated: counter restarts, seqs reused for new transactions.
+        self.assertEqual(self.imp(self.data([(1, 40, 9, "vendor_sell")])), 1)
+        self.assertEqual(self.kinds(), ["vendor_sell"])
+
+    def test_reset_to_empty_ledger_purges(self):
+        self.imp(self.data([(1, 10, 5, "loot"), (2, 20, 5, "loot")]))
+        # Recreated but no transactions yet (tx = {}, seq = 0): stale rows must go.
+        self.assertEqual(self.imp(self.data([], seq=0)), 0)
+        self.assertEqual(self.kinds(), [])
+
+    def test_reset_same_length_different_content(self):
+        self.imp(self.data([(1, 10, 5, "loot"), (2, 20, 5, "loot")]))
+        # Counter didn't drop, but overlapping seqs now hold different transactions.
+        self.assertEqual(self.imp(self.data([(1, 40, 9, "quest"), (2, 50, 9, "quest")])), 2)
+        self.assertEqual(self.kinds(), ["quest", "quest"])
+
+    def two_chars(self):
+        def char(name, t, k):
+            return {"name": name, "realm": "Wyrmrest Accord", "class": "MAGE",
+                    "faction": "Horde", "level": 90, "gold": 1, "lastSeen": 1, "seq": 1,
+                    "tx": [{"s": 1, "t": t, "a": 5, "k": k}]}
+        return {"MariposaDB": {"chars": {
+            "A-WyrmrestAccord": char("A", 10, "loot"),
+            "B-WyrmrestAccord": char("B", 11, "quest")}}}
+
+    def names(self):
+        return {r[0] for r in self.conn.execute("SELECT name FROM characters")}
+
+    def test_deleted_character_is_pruned(self):
+        self.imp(self.two_chars())
+        self.assertEqual(self.names(), {"A", "B"})
+        one = self.two_chars()
+        del one["MariposaDB"]["chars"]["B-WyrmrestAccord"]  # B deleted in game
+        self.imp(one)
+        self.assertEqual(self.names(), {"A"})
+        self.assertEqual(self.conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE char_key = 'B-WyrmrestAccord'").fetchone()[0], 0)
+
+    def test_empty_chars_does_not_wipe(self):
+        self.imp(self.data([(1, 10, 5, "loot")]))
+        # A file with no characters (truncated or mid-write) must not prune.
+        self.imp({"MariposaDB": {"chars": {}}})
+        self.assertEqual(self.names(), {"Cynze"})
+
+
 if __name__ == "__main__":
     unittest.main()
