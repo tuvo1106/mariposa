@@ -25,6 +25,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   its class color, a hover readout of every character's balance, and a table view.
 - Addon: crafting orders are tracked as Crafting Orders (the tip paid to place one) and
   Crafting Commissions (earned fulfilling one) instead of Other.
+- Addon: gold from opening reward bags and caches, such as Prey hunt rewards, is tracked as
+  Reward Bags instead of Other.
 
 ### Changed
 
