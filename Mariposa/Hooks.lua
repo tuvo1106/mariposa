@@ -92,3 +92,25 @@ end
 if WithdrawGuildBankMoney then
   hooksecurefunc("WithdrawGuildBankMoney", function(amount) expect("guild_bank", amount) end)
 end
+
+-- Crafting orders -------------------------------------------------------------
+-- Placing an order deducts the tip (and a listing deposit) immediately; the tip
+-- is readable up front. Fulfilling one pays the crafter's commission, whose
+-- amount isn't, so claim the next incoming gold. Anything left over (the
+-- deposit) is caught by the crafting-order window context.
+
+if C_CraftingOrders then
+  local place = (C_CraftingOrders.PlaceNewOrder and "PlaceNewOrder")
+    or (C_CraftingOrders.PlaceOrder and "PlaceOrder")
+  if place then
+    hooksecurefunc(C_CraftingOrders, place, function(orderInfo)
+      local tip = type(orderInfo) == "table" and orderInfo.tipAmount
+      if tip and tip > 0 then expect("crafting_order", -tip) end
+    end)
+  end
+  if C_CraftingOrders.FulfillOrder then
+    hooksecurefunc(C_CraftingOrders, "FulfillOrder", function()
+      expect("crafting_commission", nil, nil, 1)
+    end)
+  end
+end

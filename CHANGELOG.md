@@ -21,6 +21,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Dashboard: a search box filters the ledger, and Export CSV downloads the filtered ledger.
 - Dashboard: a 1-day range that charts today hour by hour and compares it with the same
   time yesterday.
+- Dashboard: a Balance by character chart on the Overview, with one line per character in
+  its class color, a hover readout of every character's balance, and a table view.
+- Addon: crafting orders are tracked as Crafting Orders (the tip paid to place one) and
+  Crafting Commissions (earned fulfilling one) instead of Other.
 - Addon: gold from opening reward bags and caches, such as Prey hunt rewards, is tracked as
   Reward Bags instead of Other.
 
@@ -31,5 +35,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   buttons are red. Amounts show coin icons, characters show in their class colors, and the
   tooltip is styled like the game's. It's dark only, like the game, so the light/dark
   toggle is gone.
+- Companion: `--summary` prints category names instead of internal keys, in a column wide
+  enough for the longest one.
 
 ### Fixed
+
+- Addon: net worth no longer reads 0 after logging out. The logout snapshot overwrote the
+  warband bank and each character's balance with 0, and the next login then booked the whole
+  balance as Untracked Change.
+- Companion: resetting a character no longer leaves its old transactions behind, and
+  characters deleted from the addon's data are dropped on the next import.

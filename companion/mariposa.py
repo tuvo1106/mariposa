@@ -3,6 +3,9 @@
 
 The game only writes SavedVariables on logout or /reload, so run this after
 either. Imports are idempotent: transactions are keyed by (character, seq).
+A character whose in-game ledger was reset (deleted and recreated, so its seq
+counter restarts) is detected and its stale rows are replaced, so reused seq
+numbers don't leave old transactions behind.
 
     python3 mariposa.py                    # auto-detect WoW, write mariposa.db
     python3 mariposa.py --wtf PATH --db out.db --csv out.csv
@@ -236,7 +239,7 @@ def find_saved_variables(wtf: Path) -> list[tuple[str, Path]]:
 def import_db(conn: sqlite3.Connection, account: str, data: dict) -> int:
     """Upsert one account's MariposaDB; return the number of new transactions."""
     db = data.get("MariposaDB") or {}
-    tx_rows = []
+    new_tx = 0
     for char_key, c in (db.get("chars") or {}).items():
         conn.execute(
             """INSERT INTO characters VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -247,13 +250,47 @@ def import_db(conn: sqlite3.Connection, account: str, data: dict) -> int:
             (char_key, account, c.get("name"), c.get("realm"), c.get("class"),
              c.get("faction"), c.get("level"), c.get("gold"), c.get("lastSeen")),
         )
+        incoming = []
         for tx in c.get("tx") or []:
             ref = tx.get("r")
-            tx_rows.append((char_key, tx["s"], tx["t"], tx["a"], tx["k"],
-                            None if ref is None else str(ref), tx.get("m")))
-    after_chars = conn.total_changes
-    conn.executemany("INSERT OR IGNORE INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?)", tx_rows)
-    new_tx = conn.total_changes - after_chars
+            incoming.append((char_key, tx["s"], tx["t"], tx["a"], tx["k"],
+                             None if ref is None else str(ref), tx.get("m")))
+
+        # The in-game ledger is append-only, so stored rows must still be present
+        # with identical content. Two things prove a reset (the character was
+        # deleted and recreated, restarting its seq counter): the live seq
+        # counter dropped below a seq we've stored, or an overlapping seq now
+        # holds a different transaction. Either way the stored rows are stale, so
+        # replace this character's ledger wholesale. (Pruning low seqs wouldn't
+        # trip this: the counter keeps climbing and overlapping content matches.)
+        stored = {row[0]: (row[1], row[2], row[3]) for row in conn.execute(
+            "SELECT seq, ts, amount, category FROM transactions WHERE char_key = ?", (char_key,))}
+        counter = c.get("seq") or 0
+        reset = (bool(stored) and counter < max(stored)) or any(
+            r[1] in stored and stored[r[1]] != (r[2], r[3], r[4]) for r in incoming)
+
+        if reset:
+            conn.execute("DELETE FROM transactions WHERE char_key = ?", (char_key,))
+            conn.executemany("INSERT INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?)", incoming)
+            new_tx += len(incoming)
+        else:
+            before = conn.total_changes
+            conn.executemany("INSERT OR IGNORE INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?)", incoming)
+            new_tx += conn.total_changes - before
+
+    # Drop characters this account no longer has: they were deleted in-game, so
+    # the mirror drops them and their ledgers too. Scoped to the account, and
+    # skipped when the file lists no characters at all, so a truncated or empty
+    # read can't wipe the database.
+    incoming_keys = list((db.get("chars") or {}).keys())
+    if incoming_keys:
+        placeholders = ",".join("?" * len(incoming_keys))
+        gone = [k for (k,) in conn.execute(
+            f"SELECT char_key FROM characters WHERE account = ? AND char_key NOT IN ({placeholders})",
+            (account, *incoming_keys))]
+        for k in gone:
+            conn.execute("DELETE FROM transactions WHERE char_key = ?", (k,))
+            conn.execute("DELETE FROM characters WHERE char_key = ?", (k,))
 
     warband = db.get("warband") or {}
     if "gold" in warband:
@@ -286,13 +323,17 @@ def print_summary(conn: sqlite3.Connection, days: int):
         """SELECT category, SUM(amount) FROM transactions WHERE ts >= ?
            GROUP BY category ORDER BY ABS(SUM(amount)) DESC""", (since,)).fetchall()
     print(f"Last {days} days, all characters")
+    # Readable labels, in a column wide enough for the longest one, so a long
+    # name like "Crafting Commissions" can't push its amount out of line.
+    labels = [CATEGORIES.get(c, {}).get("label", c) for c, _ in rows]
+    width = max([len(s) for s in labels] + [len("Net")])
     net = 0
-    for category, total in rows:
+    for (category, total), label in zip(rows, labels):
         note = "  (transfer, not counted)" if category in TRANSFER_CATEGORIES else ""
         if not note:
             net += total
-        print(f"  {category:<14} {gold(total):>14}{note}")
-    print(f"  {'net':<14} {gold(net):>14}")
+        print(f"  {label:<{width}} {gold(total):>14}{note}")
+    print(f"  {'Net':<{width}} {gold(net):>14}")
 
 
 def main(argv: list[str] | None = None) -> int:
