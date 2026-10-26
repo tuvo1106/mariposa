@@ -31,3 +31,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   toggle is gone.
 
 ### Fixed
+
+- Addon: net worth no longer reads 0 after logging out. The logout snapshot overwrote the
+  warband bank and each character's balance with 0, and the next login then booked the whole
+  balance as Untracked Change.
+- Companion: resetting a character no longer leaves its old transactions behind, and
+  characters deleted from the addon's data are dropped on the next import.
