@@ -21,6 +21,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Dashboard: a search box filters the ledger, and Export CSV downloads the filtered ledger.
 - Dashboard: a 1-day range that charts today hour by hour and compares it with the same
   time yesterday.
+- Dashboard: a Balance by character chart on the Overview, with one line per character in
+  its class color, a hover readout of every character's balance, and a table view.
 
 ### Changed
 
