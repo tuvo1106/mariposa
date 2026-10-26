@@ -29,6 +29,21 @@ python3 companion/mariposa.py --csv ledger.csv     # also export CSV
 python3 companion/mariposa.py --dashboard dashboard.html   # offline dashboard; open in a browser
 ```
 
+### Playing on more than one computer
+
+Each computer keeps its own copy of the addon's data. To combine them, copy the other
+computer's file into the `imports` folder in this repo, then run the importer as usual:
+
+1. On the other computer, find
+   `World of Warcraft/_retail_/WTF/Account/<ACCOUNT>/SavedVariables/Mariposa.lua`.
+2. Copy it to `imports/` here, under any name, such as `imports/laptop.lua`. If this
+   computer has more than one WoW account, use a subfolder named after the account, such as
+   `imports/<ACCOUNT>/laptop.lua`.
+3. Run the importer. Copy the file again whenever you want newer data; replacing it is safe.
+
+Use the latest addon on every computer, so each file identifies itself and each login
+records enough for gold to be counted once.
+
 To work on the dashboard without playing, generate synthetic data (written to the
 gitignored `synthetic/` folder):
 
