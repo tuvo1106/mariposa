@@ -74,7 +74,6 @@ end
 -- knows a title once that quest's data is loaded, so missing ones are requested
 -- on login and saved as each load completes.
 
-local QUEST_CATEGORIES = { quest = true, world_quest = true, bonus = true }
 local wantedQuests = {}  -- requested by us; the load event also fires for others' requests
 
 local function questTitle(questID)
@@ -100,7 +99,7 @@ end
 local function nameEarlierQuests()
   for _, c in pairs(ns.db.chars) do
     for _, t in ipairs(c.tx) do
-      local id = QUEST_CATEGORIES[t.k] and tonumber(t.r)
+      local id = ns.QUEST_CATEGORIES[t.k] and tonumber(t.r)
       if id then nameQuest(id) end
     end
   end
