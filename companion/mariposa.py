@@ -71,11 +71,23 @@ CREATE TABLE IF NOT EXISTS warband (
     gold    INTEGER,
     updated INTEGER
 );
+-- Quest titles the addon looked up (MariposaDB.questNames), merged from every file.
+CREATE TABLE IF NOT EXISTS quest_names (
+    id   TEXT PRIMARY KEY,  -- the quest ID as stored in transactions.ref
+    name TEXT NOT NULL
+);
 -- What every report reads: adjustments net of what other installs explain,
--- dropping those that are fully explained.
-CREATE VIEW IF NOT EXISTS ledger AS
-    SELECT char_key, source, seq, ts, amount - explained AS amount, category, ref, map_id
-    FROM transactions WHERE amount - explained != 0;
+-- dropping those that are fully explained, and quest rewards showing the
+-- quest's title instead of its ID once it's known. Recreated on every run, so
+-- an older database picks up changes to it.
+DROP VIEW IF EXISTS ledger;
+CREATE VIEW ledger AS
+    SELECT t.char_key, t.source, t.seq, t.ts, t.amount - t.explained AS amount, t.category,
+           COALESCE(q.name, t.ref) AS ref, t.map_id
+    FROM transactions t
+    LEFT JOIN quest_names q
+      ON t.category IN ('quest', 'world_quest', 'bonus') AND q.id = t.ref
+    WHERE t.amount - t.explained != 0;
 """
 
 
@@ -375,6 +387,13 @@ def import_file(conn: sqlite3.Connection, account: str, data: dict, source: str)
                      (source, *chars))
 
     # One warband bank per account: keep the most recent snapshot.
+    # Quest titles are the same for every character and computer; any file's will do.
+    names = db.get("questNames") or {}
+    if isinstance(names, list):  # the parser turns keys 1..n into a list
+        names = dict(enumerate(names, start=1))
+    conn.executemany("INSERT OR REPLACE INTO quest_names VALUES (?, ?)",
+                     [(str(qid), str(name)) for qid, name in names.items()])
+
     warband = db.get("warband") or {}
     if "gold" in warband:
         conn.execute(

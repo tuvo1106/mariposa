@@ -111,6 +111,15 @@ local function commissionFor(order)
   return order.tipAmount - (order.consortiumCut or 0)
 end
 
+-- The commission's detail: "Item, for Customer", or whichever part is known.
+local function orderDetail(order)
+  if type(order) ~= "table" then return nil end
+  local item = order.itemID and C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(order.itemID)
+  local customer = order.customerName ~= "" and order.customerName or nil
+  if item and customer then return item .. ", for " .. customer end
+  return item or customer
+end
+
 if C_CraftingOrders then
   local place = (C_CraftingOrders.PlaceNewOrder and "PlaceNewOrder")
     or (C_CraftingOrders.PlaceOrder and "PlaceOrder")
@@ -122,12 +131,12 @@ if C_CraftingOrders then
   end
   if C_CraftingOrders.FulfillOrder then
     hooksecurefunc(C_CraftingOrders, "FulfillOrder", function()
-      local commission = C_CraftingOrders.GetClaimedOrder
-        and commissionFor(C_CraftingOrders.GetClaimedOrder())
+      local order = C_CraftingOrders.GetClaimedOrder and C_CraftingOrders.GetClaimedOrder()
+      local commission, detail = commissionFor(order), orderDetail(order)
       if commission == nil then
-        expect("crafting_commission", nil, nil, 1, OPEN_CLAIM_TTL)
+        expect("crafting_commission", nil, detail, 1, OPEN_CLAIM_TTL)
       elseif commission > 0 then
-        expect("crafting_commission", commission)
+        expect("crafting_commission", commission, detail)
       end
     end)
   end

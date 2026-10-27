@@ -38,8 +38,9 @@ Account-wide SavedVariables `MariposaDB`, written by the game only on logout or 
 
 ```lua
 MariposaDB = {
-  version = 2,
+  version = 3,
   installId = "<hex>",   -- this computer's copy of the data
+  questNames = { [questID] = "Title", ... },  -- titles for quest rewards' details
   settings = { debug = false },
   warband = { gold = <copper>, updated = <epoch> },
   chars = {
@@ -54,7 +55,10 @@ MariposaDB = {
 ```
 
 Each character's ledger is append-only and numbered per install, so `(character, install,
-seq)` is a stable key for idempotent imports. Categories are defined in
+seq)` is a stable key for idempotent imports. A quest reward's `r` is the quest ID. Its title
+goes in `questNames` when the game has it, and on each login the addon asks the game to load
+any titles still missing, so earlier rewards get named too. A crafting commission's `r` is
+the item and customer. Categories are defined in
 `Mariposa/Categories.lua`.
 
 ## Companion

@@ -27,6 +27,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Crafting Commissions (earned fulfilling one) instead of Other.
 - Addon: gold from opening reward bags and caches, such as Prey hunt rewards, is tracked as
   Reward Bags instead of Other.
+- Addon: quest rewards show the quest's name instead of its ID, including rewards recorded
+  before this change, which are named after your next login. Crafting commissions show the
+  item and customer.
 - Companion: data from other computers. Copy their `Mariposa.lua` into `imports/`, and their
   ledgers are merged without counting the same gold twice. The addon now identifies each
   computer's data, and the database is migrated in place.
