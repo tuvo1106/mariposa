@@ -36,7 +36,7 @@ function Ledger:Record(cat, amount, ref, group)
   }
   c.tx[#c.tx + 1] = tx
   if ns.db.settings.debug then
-    ns.Print(ns.FormatMoney(amount, true), ns.CategoryLabel(cat), ref and ("(" .. tostring(ref) .. ")") or "")
+    ns.Print(ns.FormatMoney(amount, true), ns.CategoryLabel(cat), ref and ("(" .. ns.DetailText(cat, ref) .. ")") or "")
   end
   return tx
 end

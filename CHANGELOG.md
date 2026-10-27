@@ -59,6 +59,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Addon: `/mp log` and debug messages show quest names, like the dashboard, instead of quest
+  IDs.
 - Addon: net worth no longer reads 0 after logging out. The logout snapshot overwrote the
   warband bank and each character's balance with 0, and the next login then booked the whole
   balance as Untracked Change.
