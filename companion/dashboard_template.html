@@ -197,7 +197,7 @@ select.pill option { background: #1a1a1a; color: var(--text-1); }
 .bars { display: flex; flex-direction: column; gap: 2px; }
 .bar-row {
   display: grid; grid-template-columns: minmax(96px, 36%) 1fr; align-items: center;
-  gap: 8px; padding: 4px 6px; border-radius: 3px; cursor: default;
+  gap: 8px; padding: 4px 6px; border-radius: 3px; cursor: pointer;
 }
 .bar-row:hover, .bar-row:focus-visible { background: var(--row-hover); }
 .bar-label { font: 15px var(--display); color: var(--title); text-shadow: 0 1px 0 #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -874,6 +874,20 @@ function renderDaily(host, daily) {
 // ---------------------------------------------------------------------------
 // Category bars (HTML: label, bar, value at the tip)
 
+// The transactions behind a category bar: the Ledger filtered to that category,
+// within the current range and character. A search would hide some of them,
+// so it's cleared.
+function openCategory(cat) {
+  hideTip();
+  state.ledgerCat = cat;
+  state.ledgerShown = LEDGER_PAGE;
+  state.query = "";
+  document.getElementById("search").value = "";
+  showPage("ledger");
+  renderLedger();
+  document.getElementById("page-title").scrollIntoView({ block: "nearest" });
+}
+
 function renderBars(host, entries, color, total) {
   host.replaceChildren();
   if (!entries.length) {
@@ -883,8 +897,14 @@ function renderBars(host, entries, color, total) {
   const max = Math.abs(entries[0][1]);
   for (const [cat, amount] of entries) {
     const share = Math.round(Math.abs(amount) / Math.abs(total) * 100);
-    const row = host.appendChild(el("div", { class: "bar-row", tabindex: "0",
-      "aria-label": `${label(cat)} ${gold(amount)}, ${share}%` }));
+    const row = host.appendChild(el("div", { class: "bar-row", tabindex: "0", role: "button",
+      "aria-label": `${label(cat)} ${gold(amount)}, ${share}%. Show transactions` }));
+    row.addEventListener("click", () => openCategory(cat));
+    row.addEventListener("keydown", ev => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      ev.preventDefault();
+      openCategory(cat);
+    });
     row.appendChild(el("span", { class: "bar-label" }, label(cat)));
     const track = row.appendChild(el("span", { class: "bar-track" }));
     const bar = track.appendChild(el("span", { class: "bar" }));
@@ -1092,8 +1112,8 @@ function update() {
   table(document.getElementById("daily-table"), [[when], ["Income", true], ["Expenses", true], ["Net", true]],
     model.daily.map(d => [d.tip, money(d.inc, true), money(d.exp, true), money(d.inc + d.exp, true)]).reverse());
 
-  document.getElementById("income-sub").textContent = `${gold(cur.inc)} total`;
-  document.getElementById("expense-sub").textContent = `${gold(cur.exp)} total`;
+  document.getElementById("income-sub").textContent = `${gold(cur.inc)} total. Select a category to see its transactions.`;
+  document.getElementById("expense-sub").textContent = `${gold(cur.exp)} total. Select a category to see its transactions.`;
   renderBars(document.getElementById("income-bars"), model.incomeCats, "var(--income)", cur.inc);
   renderBars(document.getElementById("expense-bars"), model.expenseCats, "var(--expense)", cur.exp);
 
