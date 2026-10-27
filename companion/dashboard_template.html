@@ -196,10 +196,12 @@ select.pill option { background: #1a1a1a; color: var(--text-1); }
 
 .bars { display: flex; flex-direction: column; gap: 2px; }
 .bar-row {
-  display: grid; grid-template-columns: minmax(96px, 36%) 1fr; align-items: center;
+  display: grid; grid-template-columns: minmax(96px, 44%) 1fr; align-items: center;
   gap: 8px; padding: 4px 6px; border-radius: 3px; cursor: pointer;
 }
 .bar-row:hover, .bar-row:focus-visible { background: var(--row-hover); }
+.bar-row.group .bar-label { padding-left: 10px; font-size: 13px; color: var(--text-2); }
+.bar-row.group .bar { opacity: 0.65; height: 10px; }
 .bar-label { font: 15px var(--display); color: var(--title); text-shadow: 0 1px 0 #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar-track { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .bar { height: 14px; border-radius: 0 4px 4px 0; flex: none; min-width: 2px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.6); }
@@ -458,7 +460,8 @@ function addDays(dayTs, n) {
 // ---------------------------------------------------------------------------
 // State
 
-const state = { range: 30, pocket: "all", page: "overview", ledgerCat: "all", query: "", ledgerShown: LEDGER_PAGE };
+const state = { range: 30, pocket: "all", page: "overview", ledgerCat: "all", ledgerGroup: undefined,
+  query: "", ledgerShown: LEDGER_PAGE };
 function loadPrefs() {
   try {
     const saved = JSON.parse(localStorage.getItem("mariposa.filters") || "{}");
@@ -477,6 +480,18 @@ function savePrefs() {
 
 // ---------------------------------------------------------------------------
 // Aggregation
+
+// Totals per group within a category: groups.get(cat).get(group or "").
+function addToGroup(groups, cat, group, amount) {
+  const byGroup = groups.get(cat) || new Map();
+  groups.set(cat, byGroup);
+  const key = group || "";
+  byGroup.set(key, (byGroup.get(key) || 0) + amount);
+}
+
+// What a category's ungrouped transactions are called in its breakdown.
+const NO_GROUP = { crafting_commission: "No profession" };
+const groupLabel = (cat, group) => group || NO_GROUP[cat] || "Other";
 
 // Bucket start times: each hour of `startDay` up to endTs, or each day from
 // startDay through endTs's day.
@@ -560,6 +575,7 @@ function compute() {
     : ts => dayIndex.get(startOfDay(ts));
   const daily = bucketLabels(starts, hourly).map(b => ({ ...b, inc: 0, exp: 0, delta: 0 }));
   const incomeCats = new Map(), expenseCats = new Map();
+  const incomeGroups = new Map(), expenseGroups = new Map();
   const perPocket = D.pockets.map(() => ({ inc: 0, exp: 0, xfer: 0 }));
   const cur = { inc: 0, exp: 0 }, prev = { inc: 0, exp: 0 };
   const ledger = [];
@@ -592,6 +608,7 @@ function compute() {
       expenseCats.set(cat, (expenseCats.get(cat) || 0) + amount);
       if (di !== undefined) daily[di].exp += amount;
     }
+    addToGroup(amount > 0 ? incomeGroups : expenseGroups, cat, t[5], amount);
   }
 
   // Walk balances backwards from today's.
@@ -617,6 +634,7 @@ function compute() {
     cur, prev,
     // Only compare against a previous period the data fully covers.
     hasPrev: state.range !== "all" && pocketFirstTs <= prevStart,
+    incomeGroups, expenseGroups,
     incomeCats: [...incomeCats].sort(byAmount),
     expenseCats: [...expenseCats].sort(byAmount),
     perPocket, pocketIdx, ledger,
@@ -875,11 +893,12 @@ function renderDaily(host, daily) {
 // Category bars (HTML: label, bar, value at the tip)
 
 // The transactions behind a category bar: the Ledger filtered to that category,
-// within the current range and character. A search would hide some of them,
-// so it's cleared.
-function openCategory(cat) {
+// and to one group within it when given, within the current range and
+// character. A search would hide some of them, so it's cleared.
+function openCategory(cat, group) {
   hideTip();
   state.ledgerCat = cat;
+  state.ledgerGroup = group;
   state.ledgerShown = LEDGER_PAGE;
   state.query = "";
   document.getElementById("search").value = "";
@@ -888,7 +907,33 @@ function openCategory(cat) {
   document.getElementById("page-title").scrollIntoView({ block: "nearest" });
 }
 
-function renderBars(host, entries, color, total) {
+function barRow(host, { text, amount, max, total, color, sub, onOpen }) {
+  const share = Math.round(Math.abs(amount) / Math.abs(total) * 100);
+  const row = host.appendChild(el("div", { class: sub ? "bar-row group" : "bar-row", tabindex: "0",
+    role: "button", "aria-label": `${text} ${gold(amount)}, ${share}%. Show transactions` }));
+  row.addEventListener("click", onOpen);
+  row.addEventListener("keydown", ev => {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    ev.preventDefault();
+    onOpen();
+  });
+  row.appendChild(el("span", { class: "bar-label" }, text));
+  const track = row.appendChild(el("span", { class: "bar-track" }));
+  const bar = track.appendChild(el("span", { class: "bar" }));
+  bar.style.background = color;
+  bar.style.width = `calc((100% - 96px) * ${Math.abs(amount) / max})`;
+  track.appendChild(el("span", { class: "bar-value" })).appendChild(money(amount));
+  const tipRows = [{ value: gold(amount), name: `${share}% of total`, color }];
+  row.addEventListener("pointermove", ev => showTip(ev.clientX, ev.clientY, text, tipRows));
+  row.addEventListener("pointerleave", hideTip);
+  row.addEventListener("focus", () => {
+    const b = row.getBoundingClientRect();
+    showTip(b.right - 120, b.top + b.height / 2, text, tipRows);
+  });
+  row.addEventListener("blur", hideTip);
+}
+
+function renderBars(host, entries, color, total, groups) {
   host.replaceChildren();
   if (!entries.length) {
     host.appendChild(el("div", { class: "empty" }, "Nothing in this range"));
@@ -896,29 +941,15 @@ function renderBars(host, entries, color, total) {
   }
   const max = Math.abs(entries[0][1]);
   for (const [cat, amount] of entries) {
-    const share = Math.round(Math.abs(amount) / Math.abs(total) * 100);
-    const row = host.appendChild(el("div", { class: "bar-row", tabindex: "0", role: "button",
-      "aria-label": `${label(cat)} ${gold(amount)}, ${share}%. Show transactions` }));
-    row.addEventListener("click", () => openCategory(cat));
-    row.addEventListener("keydown", ev => {
-      if (ev.key !== "Enter" && ev.key !== " ") return;
-      ev.preventDefault();
-      openCategory(cat);
-    });
-    row.appendChild(el("span", { class: "bar-label" }, label(cat)));
-    const track = row.appendChild(el("span", { class: "bar-track" }));
-    const bar = track.appendChild(el("span", { class: "bar" }));
-    bar.style.background = color;
-    bar.style.width = `calc((100% - 96px) * ${Math.abs(amount) / max})`;
-    track.appendChild(el("span", { class: "bar-value" })).appendChild(money(amount));
-    const tipRows = [{ value: gold(amount), name: `${share}% of total`, color }];
-    row.addEventListener("pointermove", ev => showTip(ev.clientX, ev.clientY, label(cat), tipRows));
-    row.addEventListener("pointerleave", hideTip);
-    row.addEventListener("focus", () => {
-      const b = row.getBoundingClientRect();
-      showTip(b.right - 120, b.top + b.height / 2, label(cat), tipRows);
-    });
-    row.addEventListener("blur", hideTip);
+    barRow(host, { text: label(cat), amount, max, total, color, onOpen: () => openCategory(cat) });
+    // Break a category down only when some of it is grouped, e.g. commissions by profession.
+    const byGroup = groups.get(cat);
+    if (!byGroup || [...byGroup.keys()].every(g => g === "")) continue;
+    const parts = [...byGroup].sort(([ga, a], [gb, b]) => (ga === "") - (gb === "") || Math.abs(b) - Math.abs(a));
+    for (const [group, part] of parts) {
+      barRow(host, { text: groupLabel(cat, group), amount: part, max, total, color, sub: true,
+        onOpen: () => openCategory(cat, group) });
+    }
   }
 }
 
@@ -964,7 +995,11 @@ function buildNav() {
     return b;
   };
   document.getElementById("page-nav").replaceChildren(
-    ...PAGES.map(([id, text]) => item(text, id, () => showPage(id))));
+    ...PAGES.map(([id, text]) => item(text, id, () => {
+      state.ledgerGroup = undefined;
+      showPage(id);
+      if (id === "ledger") renderLedger();
+    })));
   document.getElementById("pocket-nav").replaceChildren(
     item("All characters", "all", () => setPocket("all")),
     ...D.pockets.map(p => item(p.name, p.key, () => setPocket(p.key), classColor(p))));
@@ -1114,8 +1149,8 @@ function update() {
 
   document.getElementById("income-sub").textContent = `${gold(cur.inc)} total. Select a category to see its transactions.`;
   document.getElementById("expense-sub").textContent = `${gold(cur.exp)} total. Select a category to see its transactions.`;
-  renderBars(document.getElementById("income-bars"), model.incomeCats, "var(--income)", cur.inc);
-  renderBars(document.getElementById("expense-bars"), model.expenseCats, "var(--expense)", cur.exp);
+  renderBars(document.getElementById("income-bars"), model.incomeCats, "var(--income)", cur.inc, model.incomeGroups);
+  renderBars(document.getElementById("expense-bars"), model.expenseCats, "var(--expense)", cur.exp, model.expenseGroups);
 
   const pocketRows = D.pockets
     .map((p, i) => ({ p, f: model.perPocket[i] }))
@@ -1128,11 +1163,12 @@ function update() {
   renderLedger();
 }
 
-// Ledger rows after the category filter and search box.
+// Ledger rows after the category and group filters and the search box.
 function ledgerRows() {
   const q = state.query;
-  return model.ledger.filter(([pi, , , cat, ref]) =>
+  return model.ledger.filter(([pi, , , cat, ref, group]) =>
     (state.ledgerCat === "all" || cat === state.ledgerCat) &&
+    (state.ledgerGroup === undefined || (group || "") === state.ledgerGroup) &&
     (!q || D.pockets[pi].name.toLowerCase().includes(q) || label(cat).toLowerCase().includes(q) ||
       (ref != null && String(ref).toLowerCase().includes(q))));
 }
@@ -1142,13 +1178,16 @@ function renderLedger() {
   const catSelect = document.getElementById("ledger-cat");
   const cats = [...new Set(model.ledger.map(t => t[3]))].sort((a, b) => label(a).localeCompare(label(b)));
   if (state.ledgerCat !== "all" && !cats.includes(state.ledgerCat)) state.ledgerCat = "all";
+  if (state.ledgerCat === "all") state.ledgerGroup = undefined;
   catSelect.replaceChildren(el("option", { value: "all" }, "All categories"),
     ...cats.map(c => el("option", { value: c }, label(c))));
   catSelect.value = state.ledgerCat;
   const rows = ledgerRows();
   const shown = rows.slice(0, state.ledgerShown);
   document.getElementById("ledger-sub").textContent =
-    `${nf.format(rows.length)} transactions${state.query ? ` matching “${state.query}”` : ""}, newest first`;
+    `${nf.format(rows.length)} transaction${rows.length === 1 ? "" : "s"}` +
+    (state.ledgerGroup !== undefined ? ` in ${groupLabel(state.ledgerCat, state.ledgerGroup)}` : "") +
+    `${state.query ? ` matching “${state.query}”` : ""}, newest first`;
   table(document.getElementById("ledger-table"),
     [["Time"], ["Character"], ["Category"], ["Amount", true], ["Detail", false, "ref"]],
     shown.map(([pi, ts, amount, cat, ref]) => [timeFmt.format(new Date(ts * 1000)), nameNode(D.pockets[pi]),
@@ -1179,6 +1218,7 @@ function exportCsv() {
 
 document.getElementById("ledger-cat").addEventListener("change", e => {
   state.ledgerCat = e.target.value;
+  state.ledgerGroup = undefined;
   state.ledgerShown = LEDGER_PAGE;
   renderLedger();
 });
@@ -1188,6 +1228,7 @@ document.getElementById("ledger-more").addEventListener("click", () => {
 });
 document.getElementById("search").addEventListener("input", e => {
   state.query = e.target.value.trim().toLowerCase();
+  state.ledgerGroup = undefined;
   state.ledgerShown = LEDGER_PAGE;
   if (state.query && state.page !== "ledger") showPage("ledger");
   renderLedger();
