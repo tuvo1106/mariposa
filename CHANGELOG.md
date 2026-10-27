@@ -27,6 +27,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Crafting Commissions (earned fulfilling one) instead of Other.
 - Addon: gold from opening reward bags and caches, such as Prey hunt rewards, is tracked as
   Reward Bags instead of Other.
+- Dashboard: selecting a category on Income & Expenses opens the Ledger filtered to it,
+  within the current date range and character.
 - Companion: data from other computers. Copy their `Mariposa.lua` into `imports/`, and their
   ledgers are merged without counting the same gold twice. The addon now identifies each
   computer's data, and the database is migrated in place.
