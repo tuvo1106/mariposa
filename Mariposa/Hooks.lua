@@ -111,6 +111,27 @@ local function commissionFor(order)
   return order.tipAmount - (order.consortiumCut or 0)
 end
 
+-- The profession whose window is open. Orders are fulfilled from a profession's
+-- own orders page, so this is the profession that earned the commission.
+local function openProfession()
+  local info = C_TradeSkillUI and C_TradeSkillUI.GetBaseProfessionInfo and C_TradeSkillUI.GetBaseProfessionInfo()
+  local name = type(info) == "table" and info.professionName
+  if name and name ~= "" then return name end
+end
+
+-- The commission's detail: "Profession - Item, for Customer", with whichever
+-- parts are known.
+local function orderDetail(order, profession)
+  local item, customer
+  if type(order) == "table" then
+    item = order.itemID and C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(order.itemID)
+    customer = order.customerName ~= "" and order.customerName or nil
+  end
+  local detail = item and customer and (item .. ", for " .. customer) or item or customer
+  if profession then return detail and (profession .. " - " .. detail) or profession end
+  return detail
+end
+
 if C_CraftingOrders then
   local place = (C_CraftingOrders.PlaceNewOrder and "PlaceNewOrder")
     or (C_CraftingOrders.PlaceOrder and "PlaceOrder")
@@ -122,12 +143,13 @@ if C_CraftingOrders then
   end
   if C_CraftingOrders.FulfillOrder then
     hooksecurefunc(C_CraftingOrders, "FulfillOrder", function()
-      local commission = C_CraftingOrders.GetClaimedOrder
-        and commissionFor(C_CraftingOrders.GetClaimedOrder())
+      local order = C_CraftingOrders.GetClaimedOrder and C_CraftingOrders.GetClaimedOrder()
+      local profession = openProfession()
+      local commission, detail = commissionFor(order), orderDetail(order, profession)
       if commission == nil then
-        expect("crafting_commission", nil, nil, 1, OPEN_CLAIM_TTL)
+        expect("crafting_commission", nil, detail, 1, OPEN_CLAIM_TTL, profession)
       elseif commission > 0 then
-        expect("crafting_commission", commission)
+        expect("crafting_commission", commission, detail, nil, nil, profession)
       end
     end)
   end

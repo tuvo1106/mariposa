@@ -42,13 +42,13 @@ def dashboard_data(conn: sqlite3.Connection, categories: dict) -> dict:
                         "realm": "", "cls": None, "gold": gold or 0})
 
     tx = []
-    for key, account, ts, amount, category, ref in conn.execute(
-            """SELECT t.char_key, c.account, t.ts, t.amount, t.category, t.ref
+    for key, account, ts, amount, category, ref, grp in conn.execute(
+            """SELECT t.char_key, c.account, t.ts, t.amount, t.category, t.ref, t.grp
                FROM ledger t JOIN characters c USING (char_key)
                ORDER BY t.ts, t.char_key, t.source, t.seq"""):
-        tx.append([index[key], ts, amount, category, ref])
+        tx.append([index[key], ts, amount, category, ref, grp])
         if category == "xfer_warband" and account in warband_index:
-            tx.append([warband_index[account], ts, -amount, category, pockets[index[key]]["name"]])
+            tx.append([warband_index[account], ts, -amount, category, pockets[index[key]]["name"], None])
 
     # When the game last wrote this data: the newest character sighting or
     # warband snapshot. Shown alongside generatedAt, which is only when this

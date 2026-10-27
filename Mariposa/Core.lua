@@ -4,7 +4,9 @@ local _, ns = ...
 
 -- 2: adds installId, and adjustments carry `p` (when the character was last
 -- seen on this computer). Older data simply lacks both; nothing is rewritten.
-local DB_VERSION = 2
+-- 3: adds questNames (quest ID -> title, for quest rewards' details), and a
+-- transaction may carry `g`, a group within its category, such as a profession.
+local DB_VERSION = 3
 
 local frame = CreateFrame("Frame")
 
@@ -19,7 +21,8 @@ local function initDB()
   MariposaDB = MariposaDB or {}
   local db = MariposaDB
   db.version = db.version or DB_VERSION
-  db.installId = db.installId or newInstallId()  -- v1 -> v2: the only migration step
+  db.installId = db.installId or newInstallId()  -- v1 -> v2
+  db.questNames = db.questNames or {}            -- v2 -> v3
   if db.version < DB_VERSION then db.version = DB_VERSION end
   db.settings = db.settings or { debug = false }
   db.chars = db.chars or {}
@@ -65,7 +68,52 @@ local function snapshotWarband()
   ns.db.warband.updated = GetServerTime()
 end
 
+-- Quest names -----------------------------------------------------------------
+-- A quest reward's detail is the quest's ID: stable, but unreadable. Titles live
+-- in db.questNames so past rewards can be named after the fact. The game only
+-- knows a title once that quest's data is loaded, so missing ones are requested
+-- on login and saved as each load completes.
+
+local QUEST_CATEGORIES = { quest = true, world_quest = true, bonus = true }
+local wantedQuests = {}  -- requested by us; the load event also fires for others' requests
+
+local function questTitle(questID)
+  local title = C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(questID)
+  if (not title or title == "") and C_TaskQuest and C_TaskQuest.GetQuestInfoByQuestID then
+    title = C_TaskQuest.GetQuestInfoByQuestID(questID)
+  end
+  if title and title ~= "" then return title end
+end
+
+-- Saves the title if the game has it; otherwise asks the game to load it.
+local function nameQuest(questID)
+  if ns.db.questNames[questID] then return end
+  local title = questTitle(questID)
+  if title then
+    ns.db.questNames[questID] = title
+  elseif C_QuestLog.RequestLoadQuestByID then
+    wantedQuests[questID] = true
+    C_QuestLog.RequestLoadQuestByID(questID)
+  end
+end
+
+local function nameEarlierQuests()
+  for _, c in pairs(ns.db.chars) do
+    for _, t in ipairs(c.tx) do
+      local id = QUEST_CATEGORIES[t.k] and tonumber(t.r)
+      if id then nameQuest(id) end
+    end
+  end
+end
+
 local handlers = {}
+
+function handlers.QUEST_DATA_LOAD_RESULT(questID, success)
+  if not wantedQuests[questID] then return end
+  wantedQuests[questID] = nil
+  local title = success and questTitle(questID)
+  if title then ns.db.questNames[questID] = title end
+end
 
 function handlers.PLAYER_LOGIN()
   initDB()
@@ -85,6 +133,7 @@ function handlers.PLAYER_LOGIN()
   ns.lastMoney = money
   ns.sessionStart = GetServerTime()
   snapshotWarband()
+  nameEarlierQuests()
 end
 
 function handlers.PLAYER_MONEY()
@@ -106,6 +155,7 @@ function handlers.QUEST_TURNED_IN(questID, _, moneyReward)
     cat = "bonus"
   end
   ns.Ledger:Expect(cat, moneyReward, questID)
+  nameQuest(questID)
 end
 
 function handlers.PLAYER_INTERACTION_MANAGER_FRAME_SHOW(interactionType)

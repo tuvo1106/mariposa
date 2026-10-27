@@ -280,6 +280,66 @@ class MultiComputerTest(unittest.TestCase):
             "SELECT source, COUNT(*) FROM transactions GROUP BY source").fetchall(), [("desk", 2)])
 
 
+class QuestNamesTest(unittest.TestCase):
+    KEY = "Cynze-WyrmrestAccord"
+
+    def details(self, names):
+        conn = sqlite3.connect(":memory:")
+        mariposa.init_schema(conn)
+        data = install_file("desk", {self.KEY: char_data(
+            [(1, 10, 500, "world_quest"), (2, 20, 300, "quest"), (3, 30, 100, "vendor_sell")],
+            gold=900, last_seen=30)})
+        for t, ref in zip(data["MariposaDB"]["chars"][self.KEY]["tx"], (94574, 88992, 94574)):
+            t["r"] = ref
+        data["MariposaDB"]["questNames"] = names
+        mariposa.import_db(conn, "ACCT", data)
+        return [r[0] for r in conn.execute("SELECT ref FROM ledger ORDER BY ts")]
+
+    def test_quest_rewards_show_their_title(self):
+        # The vendor sale's detail happens to match a quest ID; only quest rewards are renamed.
+        self.assertEqual(self.details({94574: "Supply the Front"}), ["Supply the Front", "88992", "94574"])
+
+    def test_unnamed_quest_keeps_its_id(self):
+        self.assertEqual(self.details({}), ["94574", "88992", "94574"])
+
+    def test_names_keyed_one_to_n_parse_as_a_list(self):
+        conn = sqlite3.connect(":memory:")
+        mariposa.init_schema(conn)
+        data = install_file("desk", {})
+        data["MariposaDB"]["questNames"] = ["First", "Second"]  # what the parser gives for [1], [2]
+        mariposa.import_db(conn, "ACCT", data)
+        self.assertEqual(sorted(conn.execute("SELECT id, name FROM quest_names")),
+                         [("1", "First"), ("2", "Second")])
+
+
+class GroupTest(unittest.TestCase):
+    def test_commission_profession_reaches_the_ledger(self):
+        conn = sqlite3.connect(":memory:")
+        mariposa.init_schema(conn)
+        data = install_file("desk", {"Cynze-WyrmrestAccord": char_data(
+            [(1, 10, 600, "crafting_commission"), (2, 20, 300, "crafting_commission")],
+            gold=900, last_seen=20)})
+        data["MariposaDB"]["chars"]["Cynze-WyrmrestAccord"]["tx"][0]["g"] = "Blacksmithing"
+        mariposa.import_db(conn, "ACCT", data)
+        self.assertEqual(conn.execute("SELECT grp, amount FROM ledger ORDER BY ts").fetchall(),
+                         [("Blacksmithing", 600), (None, 300)])
+
+    def test_v1_database_gains_the_group_column(self):
+        conn = sqlite3.connect(":memory:")
+        conn.executescript("""
+            CREATE TABLE transactions (char_key TEXT NOT NULL, source TEXT NOT NULL, seq INTEGER NOT NULL,
+                ts INTEGER NOT NULL, amount INTEGER NOT NULL, category TEXT NOT NULL, ref TEXT, map_id INTEGER,
+                prev_seen INTEGER, explained INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (char_key, source, seq));
+            CREATE VIEW ledger AS SELECT * FROM transactions;
+            INSERT INTO transactions (char_key, source, seq, ts, amount, category)
+                VALUES ('Cynze-WyrmrestAccord', 'desk', 1, 10, 500, 'loot');
+            PRAGMA user_version = 1;
+        """)
+        mariposa.init_schema(conn)
+        self.assertEqual(conn.execute("SELECT amount, grp FROM ledger").fetchall(), [(500, None)])
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], mariposa.SCHEMA_VERSION)
+
+
 class FindImportsTest(unittest.TestCase):
     def test_accounts_from_subfolders_or_the_single_local_account(self):
         import tempfile

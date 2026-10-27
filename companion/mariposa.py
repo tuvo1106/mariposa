@@ -38,7 +38,7 @@ DEFAULT_WTF = [
     Path(r"C:\Program Files\World of Warcraft\_retail_\WTF"),
 ]
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS characters (
@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     ref       TEXT,
     map_id    INTEGER,
     prev_seen INTEGER,           -- adjustments: when this install last saw the character
+    grp       TEXT,              -- a group within the category, e.g. a commission's profession
     explained INTEGER NOT NULL DEFAULT 0,  -- adjustments: part another install's ledger shows
     PRIMARY KEY (char_key, source, seq)
 );
@@ -71,11 +72,23 @@ CREATE TABLE IF NOT EXISTS warband (
     gold    INTEGER,
     updated INTEGER
 );
+-- Quest titles the addon looked up (MariposaDB.questNames), merged from every file.
+CREATE TABLE IF NOT EXISTS quest_names (
+    id   TEXT PRIMARY KEY,  -- the quest ID as stored in transactions.ref
+    name TEXT NOT NULL
+);
 -- What every report reads: adjustments net of what other installs explain,
--- dropping those that are fully explained.
-CREATE VIEW IF NOT EXISTS ledger AS
-    SELECT char_key, source, seq, ts, amount - explained AS amount, category, ref, map_id
-    FROM transactions WHERE amount - explained != 0;
+-- dropping those that are fully explained, and quest rewards showing the
+-- quest's title instead of its ID once it's known. Recreated on every run, so
+-- an older database picks up changes to it.
+DROP VIEW IF EXISTS ledger;
+CREATE VIEW ledger AS
+    SELECT t.char_key, t.source, t.seq, t.ts, t.amount - t.explained AS amount, t.category,
+           COALESCE(q.name, t.ref) AS ref, t.map_id, t.grp
+    FROM transactions t
+    LEFT JOIN quest_names q
+      ON t.category IN ('quest', 'world_quest', 'bonus') AND q.id = t.ref
+    WHERE t.amount - t.explained != 0;
 """
 
 
@@ -97,6 +110,12 @@ def init_schema(conn: sqlite3.Connection) -> None:
         conn.execute("""INSERT INTO transactions (char_key, source, seq, ts, amount, category, ref, map_id)
                         SELECT char_key, '', seq, ts, amount, category, ref, map_id FROM transactions_v0""")
         conn.execute("DROP TABLE transactions_v0")
+    elif has_tx and version < 2:
+        # v1 -> v2: transactions gain grp. The view is recreated below.
+        conn.executescript("""
+            DROP VIEW IF EXISTS ledger;
+            ALTER TABLE transactions ADD COLUMN grp TEXT;
+        """)
     conn.executescript(SCHEMA)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     conn.commit()
@@ -329,7 +348,7 @@ def import_file(conn: sqlite3.Connection, account: str, data: dict, source: str)
         for tx in c.get("tx") or []:
             ref = tx.get("r")
             incoming.append((char_key, source, tx["s"], tx["t"], tx["a"], tx["k"],
-                             None if ref is None else str(ref), tx.get("m"), tx.get("p")))
+                             None if ref is None else str(ref), tx.get("m"), tx.get("p"), tx.get("g")))
 
         # The same transaction filed under another source is this one: a file
         # imported before its install had an ID, or under another name. Claim it.
@@ -355,8 +374,8 @@ def import_file(conn: sqlite3.Connection, account: str, data: dict, source: str)
             r[2] in stored and stored[r[2]] != (r[3], r[4], r[5]) for r in incoming)
 
         insert = """INSERT {} INTO transactions
-                    (char_key, source, seq, ts, amount, category, ref, map_id, prev_seen)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+                    (char_key, source, seq, ts, amount, category, ref, map_id, prev_seen, grp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
         before = conn.total_changes
         if reset:
             conn.execute("DELETE FROM transactions WHERE char_key = ? AND source = ?", (char_key, source))
@@ -375,6 +394,13 @@ def import_file(conn: sqlite3.Connection, account: str, data: dict, source: str)
                      (source, *chars))
 
     # One warband bank per account: keep the most recent snapshot.
+    # Quest titles are the same for every character and computer; any file's will do.
+    names = db.get("questNames") or {}
+    if isinstance(names, list):  # the parser turns keys 1..n into a list
+        names = dict(enumerate(names, start=1))
+    conn.executemany("INSERT OR REPLACE INTO quest_names VALUES (?, ?)",
+                     [(str(qid), str(name)) for qid, name in names.items()])
+
     warband = db.get("warband") or {}
     if "gold" in warband:
         conn.execute(
@@ -435,11 +461,11 @@ def import_db(conn: sqlite3.Connection, account: str, data: dict, source: str | 
 
 def export_csv(conn: sqlite3.Connection, path: Path):
     rows = conn.execute(
-        """SELECT datetime(ts, 'unixepoch', 'localtime'), char_key, category, amount, ref, map_id, source
+        """SELECT datetime(ts, 'unixepoch', 'localtime'), char_key, category, amount, ref, map_id, source, grp
            FROM ledger ORDER BY ts, char_key, source, seq""")
     with path.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["time", "character", "category", "copper", "ref", "map_id", "source"])
+        w.writerow(["time", "character", "category", "copper", "ref", "map_id", "source", "group"])
         w.writerows(rows)
 
 

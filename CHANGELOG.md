@@ -29,6 +29,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Reward Bags instead of Other.
 - Dashboard: selecting a category on Income & Expenses opens the Ledger filtered to it,
   within the current date range and character.
+- Addon: quest rewards show the quest's name instead of its ID, including rewards recorded
+  before this change, which are named after your next login.
+- Crafting commissions record the profession, item, and customer, and Income & Expenses
+  breaks Crafting Commissions down by profession.
 - Companion: data from other computers. Copy their `Mariposa.lua` into `imports/`, and their
   ledgers are merged without counting the same gold twice. The addon now identifies each
   computer's data, and the database is migrated in place.
