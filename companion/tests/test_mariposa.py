@@ -312,6 +312,34 @@ class QuestNamesTest(unittest.TestCase):
                          [("1", "First"), ("2", "Second")])
 
 
+class GroupTest(unittest.TestCase):
+    def test_commission_profession_reaches_the_ledger(self):
+        conn = sqlite3.connect(":memory:")
+        mariposa.init_schema(conn)
+        data = install_file("desk", {"Cynze-WyrmrestAccord": char_data(
+            [(1, 10, 600, "crafting_commission"), (2, 20, 300, "crafting_commission")],
+            gold=900, last_seen=20)})
+        data["MariposaDB"]["chars"]["Cynze-WyrmrestAccord"]["tx"][0]["g"] = "Blacksmithing"
+        mariposa.import_db(conn, "ACCT", data)
+        self.assertEqual(conn.execute("SELECT grp, amount FROM ledger ORDER BY ts").fetchall(),
+                         [("Blacksmithing", 600), (None, 300)])
+
+    def test_v1_database_gains_the_group_column(self):
+        conn = sqlite3.connect(":memory:")
+        conn.executescript("""
+            CREATE TABLE transactions (char_key TEXT NOT NULL, source TEXT NOT NULL, seq INTEGER NOT NULL,
+                ts INTEGER NOT NULL, amount INTEGER NOT NULL, category TEXT NOT NULL, ref TEXT, map_id INTEGER,
+                prev_seen INTEGER, explained INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (char_key, source, seq));
+            CREATE VIEW ledger AS SELECT * FROM transactions;
+            INSERT INTO transactions (char_key, source, seq, ts, amount, category)
+                VALUES ('Cynze-WyrmrestAccord', 'desk', 1, 10, 500, 'loot');
+            PRAGMA user_version = 1;
+        """)
+        mariposa.init_schema(conn)
+        self.assertEqual(conn.execute("SELECT amount, grp FROM ledger").fetchall(), [(500, None)])
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], mariposa.SCHEMA_VERSION)
+
+
 class FindImportsTest(unittest.TestCase):
     def test_accounts_from_subfolders_or_the_single_local_account(self):
         import tempfile

@@ -48,7 +48,8 @@ MariposaDB = {
       name, realm, class, faction, level, gold, lastSeen,
       seq = <last tx number>,
       tx = { { s = seq, t = epoch, a = copper (signed), k = category, r = ref?, m = mapID?,
-               p = lastSeen before this login? (adjustments only) }, ... },
+               p = lastSeen before this login? (adjustments only),
+               g = group within the category? (crafting commissions: the profession) }, ... },
     },
   },
 }
@@ -58,7 +59,8 @@ Each character's ledger is append-only and numbered per install, so `(character,
 seq)` is a stable key for idempotent imports. A quest reward's `r` is the quest ID. Its title
 goes in `questNames` when the game has it, and on each login the addon asks the game to load
 any titles still missing, so earlier rewards get named too. A crafting commission's `r` is
-the item and customer. Categories are defined in
+the profession, item, and customer, and its `g` is the profession, which the dashboard
+breaks commissions down by. Categories are defined in
 `Mariposa/Categories.lua`.
 
 ## Companion

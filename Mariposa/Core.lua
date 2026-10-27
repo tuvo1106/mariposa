@@ -4,7 +4,8 @@ local _, ns = ...
 
 -- 2: adds installId, and adjustments carry `p` (when the character was last
 -- seen on this computer). Older data simply lacks both; nothing is rewritten.
--- 3: adds questNames, quest ID -> title, for quest rewards' details.
+-- 3: adds questNames (quest ID -> title, for quest rewards' details), and a
+-- transaction may carry `g`, a group within its category, such as a profession.
 local DB_VERSION = 3
 
 local frame = CreateFrame("Frame")
