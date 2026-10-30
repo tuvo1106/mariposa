@@ -17,6 +17,17 @@ function ns.FormatMoney(copper, signed)
   return text
 end
 
+-- Categories whose detail is a quest ID.
+ns.QUEST_CATEGORIES = { quest = true, world_quest = true, bonus = true }
+
+-- A transaction's detail as shown in game: a quest reward stores the quest's ID
+-- and shows its title once the addon has looked it up (see Core.lua).
+function ns.DetailText(cat, ref)
+  if ref == nil then return nil end
+  local names = ns.QUEST_CATEGORIES[cat] and ns.db and ns.db.questNames
+  return names and names[tonumber(ref)] or tostring(ref)
+end
+
 -- "Name-Realm" lowercased with spaces/hyphens/apostrophes stripped from the
 -- realm, so "Alt-Area 52", "alt-Area52" and "Alt" (same realm) all compare equal.
 function ns.CanonicalName(name)

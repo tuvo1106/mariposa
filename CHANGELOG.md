@@ -27,6 +27,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Crafting Commissions (earned fulfilling one) instead of Other.
 - Addon: gold from opening reward bags and caches, such as Prey hunt rewards, is tracked as
   Reward Bags instead of Other.
+- Dashboard: selecting a category on Income & Expenses opens the Ledger filtered to it,
+  within the current date range and character.
+- Addon: quest rewards show the quest's name instead of its ID, including rewards recorded
+  before this change, which are named after your next login.
+- Crafting commissions record the profession, item, and customer, and Income & Expenses
+  breaks Crafting Commissions down by profession.
+- Companion: data from other computers. Copy their `Mariposa.lua` into `imports/`, and their
+  ledgers are merged without counting the same gold twice. The addon now identifies each
+  computer's data, and the database is migrated in place.
 - Addon: `/mp forget Name` deletes a character's ledger and stops tracking it; `/mp track`
   resumes. The importer drops forgotten characters from the database.
 - Dashboard: Hide/Show buttons in the sidebar leave a character or warband bank out of the
@@ -54,6 +63,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Addon: `/mp log` and debug messages show quest names, like the dashboard, instead of quest
+  IDs.
 - Addon: net worth no longer reads 0 after logging out. The logout snapshot overwrote the
   warband bank and each character's balance with 0, and the next login then booked the whole
   balance as Untracked Change.

@@ -38,7 +38,9 @@ Account-wide SavedVariables `MariposaDB`, written by the game only on logout or 
 
 ```lua
 MariposaDB = {
-  version = 2,
+  version = 4,
+  installId = "<hex>",   -- this computer's copy of the data
+  questNames = { [questID] = "Title", ... },  -- titles for quest rewards' details
   settings = { debug = false },
   warband = { gold = <copper>, updated = <epoch> },
   ignored = { ["Name-NormalizedRealm"] = true },  -- forgotten with /mp forget; not tracked
@@ -46,20 +48,34 @@ MariposaDB = {
     ["Name-NormalizedRealm"] = {
       name, realm, class, faction, level, gold, lastSeen,
       seq = <last tx number>,
-      tx = { { s = seq, t = epoch, a = copper (signed), k = category, r = ref?, m = mapID? }, ... },
+      tx = { { s = seq, t = epoch, a = copper (signed), k = category, r = ref?, m = mapID?,
+               p = lastSeen before this login? (adjustments only),
+               g = group within the category? (crafting commissions: the profession) }, ... },
     },
   },
 }
 ```
 
-Each character's ledger is append-only and numbered, so `(character, seq)` is a stable key
-for idempotent imports. Categories are defined in `Mariposa/Categories.lua`.
+Each character's ledger is append-only and numbered per install, so `(character, install,
+seq)` is a stable key for idempotent imports. A quest reward's `r` is the quest ID. Its title
+goes in `questNames` when the game has it, and on each login the addon asks the game to load
+any titles still missing, so earlier rewards get named too. A crafting commission's `r` is
+the profession, item, and customer, and its `g` is the profession, which the dashboard
+breaks commissions down by. Categories are defined in
+`Mariposa/Categories.lua`.
 
 ## Companion
 
 `companion/mariposa.py` finds every `WTF/Account/*/SavedVariables/Mariposa.lua` (one per WoW
 license), parses it with a small SavedVariables-subset Lua parser, and upserts it into
-SQLite (`characters`, `transactions`, `warband`). Dashboards read the SQLite file.
+SQLite (`characters`, `transactions`, `warband`). Dashboards read the SQLite file through
+the `ledger` view.
+
+It also reads `Mariposa.lua` files copied from other computers into `imports/`, and merges
+them ([ADR-0005](docs/adr/0005-merge-ledgers-from-several-computers.md)). Each computer's
+ledger is kept separately. A character's balance comes from whichever computer saw it last,
+and so does the warband bank. A login `adjustment` is reduced by whatever another computer
+recorded for that character while this one wasn't watching, so money is counted once.
 
 ## Dashboard
 
@@ -101,5 +117,7 @@ current balance minus later transactions.
 - SavedVariables are lost if the client crashes; the login `adjustment` keeps balances
   right but loses the categories.
 - AH outbid refunds arrive as plain mail and currently land in `mail_in`.
+- Merging computers happens only in the companion. In game, `/mp` summaries cover what this
+  computer recorded, and the first login after playing elsewhere shows an adjustment.
 - Midnight restricts some data during instanced combat. `PLAYER_MONEY` isn't affected, but
   verify loot attribution inside dungeons.

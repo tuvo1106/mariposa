@@ -35,6 +35,11 @@ AH_ITEMS = [
     ("Crystalline Powder", 2_000, 9_000), ("Ironclaw Ore", 800, 3_500),
     ("Charged Alloy", 3_000, 12_000), ("Shadowy Gem Cluster", 4_000, 18_000),
 ]
+# Crafting orders the trader fills: (profession, item).
+CRAFTS = [
+    ("Blacksmithing", "Charged Alloy Greatsword"), ("Blacksmithing", "Sun-Blessed Hammer"),
+    ("Leatherworking", "Thalassian Toolset"), ("Alchemy", "Flask of Alchemical Chaos"),
+]
 ZONES = [2248, 2214, 2215, 2255, 2339, 2369, 2395, 2405]
 FRIENDS = ["Kaelynn-Area52", "Morrow-Area52", "Pippa-Stormrage"]
 
@@ -53,7 +58,8 @@ class World:
     def copper(self, lo: float, hi: float) -> int:
         return int(self.rng.uniform(lo, hi) * G) + self.rng.randrange(100)
 
-    def add(self, char: str, t: int, amount: int, cat: str, ref=None, zone: int | None = None) -> bool:
+    def add(self, char: str, t: int, amount: int, cat: str, ref=None, zone: int | None = None,
+            group: str | None = None) -> bool:
         if t > self.end:
             return False
         if amount < 0 and self.gold[char] + amount < 0:
@@ -68,6 +74,8 @@ class World:
             tx["r"] = ref
         if zone is not None:
             tx["m"] = zone
+        if group is not None:
+            tx["g"] = group
         self.events[char].append(tx)
         return True
 
@@ -91,6 +99,15 @@ def play_session(w: World, char: str, profile: str, t: int) -> int:
         for _ in range(rng.randint(0, 4)):
             name, lo, hi = rng.choice(AH_ITEMS)
             w.add(char, step(), -w.copper(lo * 0.6, hi * 0.8), "ah_buy", name)
+        if rng.random() < 0.3:
+            # Most commissions carry their profession; older ones, before the
+            # addon recorded it, don't.
+            profession, item = rng.choice(CRAFTS)
+            customer = rng.choice(FRIENDS).split("-")[0]
+            grouped = rng.random() < 0.8
+            w.add(char, step(), w.copper(40, 600), "crafting_commission",
+                  f"{profession} - {item}, for {customer}" if grouped else None,
+                  group=profession if grouped else None)
         if rng.random() < 0.25:
             w.add(char, step(), -w.copper(0.3, 0.3), "postage")
         if rng.random() < 0.12:

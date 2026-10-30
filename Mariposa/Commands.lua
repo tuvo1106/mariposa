@@ -101,7 +101,7 @@ function commands.log(arg)
   for i = math.max(1, #tx - n + 1), #tx do
     local t = tx[i]
     print(string.format("  %s  %s  %s%s", date("%m-%d %H:%M", t.t), ns.CategoryLabel(t.k),
-      ns.FormatMoney(t.a, true), t.r and ("  |cff888888" .. tostring(t.r) .. "|r") or ""))
+      ns.FormatMoney(t.a, true), t.r and ("  |cff888888" .. ns.DetailText(t.k, t.r) .. "|r") or ""))
   end
 end
 

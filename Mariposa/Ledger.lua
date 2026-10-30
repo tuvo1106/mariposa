@@ -19,30 +19,36 @@ local function sign(n)
   return n > 0 and 1 or (n < 0 and -1 or 0)
 end
 
-function Ledger:Record(cat, amount, ref)
+-- Returns the recorded transaction, so callers can attach extra fields.
+-- group subdivides a category for reports, e.g. a commission's profession.
+function Ledger:Record(cat, amount, ref, group)
   if amount == 0 then return end
   -- A forgotten character has only a scratch record; don't accumulate into it.
   if ns.db.ignored[ns.charKey] then return end
   local c = ns.char
   c.seq = c.seq + 1
-  c.tx[#c.tx + 1] = {
+  local tx = {
     s = c.seq,
     t = GetServerTime(),
     a = amount,
     k = cat,
     r = ref,
+    g = group,
     m = C_Map.GetBestMapForUnit("player"),
   }
+  c.tx[#c.tx + 1] = tx
   if ns.db.settings.debug then
-    ns.Print(ns.FormatMoney(amount, true), ns.CategoryLabel(cat), ref and ("(" .. tostring(ref) .. ")") or "")
+    ns.Print(ns.FormatMoney(amount, true), ns.CategoryLabel(cat), ref and ("(" .. ns.DetailText(cat, ref) .. ")") or "")
   end
+  return tx
 end
 
 -- amount may be nil to claim whatever next arrives in direction `dir`
 -- (e.g. a repair or AH deposit whose cost we can't read up front).
 -- ttl overrides EXPECT_TTL: a claim that might never be paid (a bag with no
 -- gold in it) should expire quickly so it can't capture unrelated money.
-function Ledger:Expect(cat, amount, ref, dir, ttl)
+-- group is passed through to Record.
+function Ledger:Expect(cat, amount, ref, dir, ttl, group)
   if amount == 0 then return end
   expectations[#expectations + 1] = {
     cat = cat,
@@ -51,6 +57,7 @@ function Ledger:Expect(cat, amount, ref, dir, ttl)
     ref = ref,
     at = GetTime(),
     ttl = ttl,
+    group = group,
   }
 end
 
@@ -78,7 +85,7 @@ function Ledger:Flush()
   for _, e in ipairs(live) do
     if remaining ~= 0 and e.amount and sign(e.amount) == sign(remaining) then
       local take = sign(remaining) * math.min(math.abs(e.amount), math.abs(remaining))
-      self:Record(e.cat, take, e.ref)
+      self:Record(e.cat, take, e.ref, e.group)
       remaining = remaining - take
       e.amount = e.amount - take
       e.done = e.amount == 0
@@ -88,7 +95,7 @@ function Ledger:Flush()
   -- Then open-ended claims take whatever is left in their direction.
   for _, e in ipairs(live) do
     if remaining ~= 0 and not e.amount and e.dir == sign(remaining) then
-      self:Record(e.cat, remaining, e.ref)
+      self:Record(e.cat, remaining, e.ref, e.group)
       remaining = 0
       e.done = true
     end

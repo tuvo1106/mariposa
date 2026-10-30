@@ -2,9 +2,21 @@ local _, ns = ...
 
 -- Loaded last: wires events to the modules defined in the other files.
 
-local DB_VERSION = 2
+-- 2: adds installId, and adjustments carry `p` (when the character was last
+-- seen on this computer). Older data simply lacks both; nothing is rewritten.
+-- 3: adds questNames (quest ID -> title, for quest rewards' details), and a
+-- transaction may carry `g`, a group within its category, such as a profession.
+-- 4: adds ignored (characters forgotten with /mp forget).
+local DB_VERSION = 4
 
 local frame = CreateFrame("Frame")
+
+-- Identifies this copy of the SavedVariables. The companion merges ledgers from
+-- several computers, and each numbers its transactions independently, so it
+-- needs to know which computer a ledger came from.
+local function newInstallId()
+  return string.format("%x-%04x", GetServerTime(), math.random(0, 0xffff))
+end
 
 -- Points ns.char at this character's saved record. A forgotten character gets a
 -- scratch record that is never saved, so every module can keep writing to
@@ -27,15 +39,15 @@ end
 local function initDB()
   MariposaDB = MariposaDB or {}
   local db = MariposaDB
+  db.version = db.version or DB_VERSION
+  db.installId = db.installId or newInstallId()  -- v1 -> v2
+  db.questNames = db.questNames or {}            -- v2 -> v3
+  db.ignored = db.ignored or {}                  -- v3 -> v4
+  if db.version < DB_VERSION then db.version = DB_VERSION end
   db.settings = db.settings or { debug = false }
   db.chars = db.chars or {}
   db.warband = db.warband or {}
-  db.ignored = db.ignored or {}
   ns.db = db
-
-  -- Version-gated migrations go here, before the version is stamped. v2 only
-  -- added `ignored`, which the default above covers.
-  db.version = DB_VERSION
 
   ns.charKey = UnitName("player") .. "-" .. GetNormalizedRealmName()
   ns.AttachChar()
@@ -69,16 +81,64 @@ local function snapshotWarband()
   ns.db.warband.updated = GetServerTime()
 end
 
+-- Quest names -----------------------------------------------------------------
+-- A quest reward's detail is the quest's ID: stable, but unreadable. Titles live
+-- in db.questNames so past rewards can be named after the fact. The game only
+-- knows a title once that quest's data is loaded, so missing ones are requested
+-- on login and saved as each load completes.
+
+local wantedQuests = {}  -- requested by us; the load event also fires for others' requests
+
+local function questTitle(questID)
+  local title = C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(questID)
+  if (not title or title == "") and C_TaskQuest and C_TaskQuest.GetQuestInfoByQuestID then
+    title = C_TaskQuest.GetQuestInfoByQuestID(questID)
+  end
+  if title and title ~= "" then return title end
+end
+
+-- Saves the title if the game has it; otherwise asks the game to load it.
+local function nameQuest(questID)
+  if ns.db.questNames[questID] then return end
+  local title = questTitle(questID)
+  if title then
+    ns.db.questNames[questID] = title
+  elseif C_QuestLog.RequestLoadQuestByID then
+    wantedQuests[questID] = true
+    C_QuestLog.RequestLoadQuestByID(questID)
+  end
+end
+
+local function nameEarlierQuests()
+  for _, c in pairs(ns.db.chars) do
+    for _, t in ipairs(c.tx) do
+      local id = ns.QUEST_CATEGORIES[t.k] and tonumber(t.r)
+      if id then nameQuest(id) end
+    end
+  end
+end
+
 local handlers = {}
+
+function handlers.QUEST_DATA_LOAD_RESULT(questID, success)
+  if not wantedQuests[questID] then return end
+  wantedQuests[questID] = nil
+  local title = success and questTitle(questID)
+  if title then ns.db.questNames[questID] = title end
+end
 
 function handlers.PLAYER_LOGIN()
   initDB()
   local money = GetMoney()
   local c = ns.char
   if c.gold and c.gold ~= money then
-    -- Gold moved while we weren't watching (addon disabled, or a crash lost
-    -- the last session's SavedVariables). Book it so balances reconcile.
-    ns.Ledger:Record("adjustment", money - c.gold)
+    -- Gold moved while we weren't watching (addon disabled, a crash lost the
+    -- last session's SavedVariables, or the character was played on another
+    -- computer). Book it so balances reconcile, noting when this computer last
+    -- saw the character: the companion drops whatever part of the adjustment
+    -- another computer's ledger explains for that gap.
+    local tx = ns.Ledger:Record("adjustment", money - c.gold)
+    if tx then tx.p = c.lastSeen end
   end
   c.gold = money
   c.lastSeen = GetServerTime()
@@ -89,6 +149,7 @@ function handlers.PLAYER_LOGIN()
   ns.lastMoney = money
   ns.sessionStart = GetServerTime()
   snapshotWarband()
+  nameEarlierQuests()
 end
 
 function handlers.PLAYER_MONEY()
@@ -110,6 +171,7 @@ function handlers.QUEST_TURNED_IN(questID, _, moneyReward)
     cat = "bonus"
   end
   ns.Ledger:Expect(cat, moneyReward, questID)
+  nameQuest(questID)
 end
 
 function handlers.PLAYER_INTERACTION_MANAGER_FRAME_SHOW(interactionType)
