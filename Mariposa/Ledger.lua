@@ -23,6 +23,8 @@ end
 -- group subdivides a category for reports, e.g. a commission's profession.
 function Ledger:Record(cat, amount, ref, group)
   if amount == 0 then return end
+  -- A forgotten character has only a scratch record; don't accumulate into it.
+  if ns.db.ignored[ns.charKey] then return end
   local c = ns.char
   c.seq = c.seq + 1
   local tx = {

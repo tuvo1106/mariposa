@@ -393,6 +393,17 @@ def import_file(conn: sqlite3.Connection, account: str, data: dict, source: str)
         conn.execute(f"DELETE FROM transactions WHERE source = ? AND char_key NOT IN ({placeholders})",
                      (source, *chars))
 
+    # Characters forgotten on that install (`/mp forget`) are dropped too, which
+    # the prune above can't do when they were its only characters. Another
+    # install's ledger for them stays, and so does the row while any ledger does.
+    forgotten = list(db.get("ignored") or {})
+    if forgotten:
+        placeholders = ",".join("?" * len(forgotten))
+        conn.execute(f"DELETE FROM transactions WHERE source = ? AND char_key IN ({placeholders})",
+                     (source, *forgotten))
+        conn.execute(f"DELETE FROM characters WHERE char_key IN ({placeholders}) "
+                     "AND char_key NOT IN (SELECT char_key FROM transactions)", forgotten)
+
     # One warband bank per account: keep the most recent snapshot.
     # Quest titles are the same for every character and computer; any file's will do.
     names = db.get("questNames") or {}

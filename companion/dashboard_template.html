@@ -95,6 +95,14 @@ button, select, input { font: inherit; }
   background: linear-gradient(90deg, rgba(255, 209, 0, 0) 0%, rgba(255, 209, 0, 0.14) 18%,
     rgba(255, 209, 0, 0.38) 62%, rgba(255, 209, 0, 0) 100%);
 }
+.nav-row { display: flex; align-items: center; }
+.nav-row .nav-item { flex: 1; min-width: 0; }
+.nav-row.is-hidden .nav-item { opacity: 0.45; }
+.toggle-vis {
+  padding: 4px 14px; font: 14px var(--display); color: var(--muted); text-shadow: 0 1px 0 #000;
+  background: none; border: 0; cursor: pointer;
+}
+.toggle-vis:hover { color: #fff; }
 .class-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px #000; }
 
 /* Content ------------------------------------------------------------------- */
@@ -460,20 +468,22 @@ function addDays(dayTs, n) {
 // ---------------------------------------------------------------------------
 // State
 
+// `hidden` holds pocket keys left out of every all-characters total, chart and table.
 const state = { range: 30, pocket: "all", page: "overview", ledgerCat: "all", ledgerGroup: undefined,
-  query: "", ledgerShown: LEDGER_PAGE };
+  query: "", ledgerShown: LEDGER_PAGE, hidden: new Set() };
 function loadPrefs() {
   try {
     const saved = JSON.parse(localStorage.getItem("mariposa.filters") || "{}");
     if (RANGES.some(([v]) => v === saved.range)) state.range = saved.range;
     if (saved.pocket === "all" || D.pockets.some(p => p.key === saved.pocket)) state.pocket = saved.pocket;
     if (PAGES.some(([id]) => id === saved.page)) state.page = saved.page;
+    if (Array.isArray(saved.hidden)) state.hidden = new Set(saved.hidden.filter(k => D.pockets.some(p => p.key === k)));
   } catch (_) { /* storage unavailable */ }
 }
 function savePrefs() {
   try {
     localStorage.setItem("mariposa.filters", JSON.stringify({
-      range: state.range, pocket: state.pocket, page: state.page,
+      range: state.range, pocket: state.pocket, page: state.page, hidden: [...state.hidden],
     }));
   } catch (_) { /* storage unavailable */ }
 }
@@ -563,10 +573,12 @@ function compute() {
   const prevEnd = prevStart + (endTs - startDay);
 
   const pocketIdx = state.pocket === "all" ? -1 : D.pockets.findIndex(p => p.key === state.pocket);
-  const inPocket = t => pocketIdx < 0 || t[0] === pocketIdx;
+  // Hidden pockets only drop out of the all-characters view; selecting one still shows it.
+  const hiddenIdx = new Set(D.pockets.flatMap((p, i) => state.hidden.has(p.key) ? [i] : []));
+  const inPocket = t => pocketIdx < 0 ? !hiddenIdx.has(t[0]) : t[0] === pocketIdx;
   const pocketFirstTs = (D.tx.find(inPocket) || [0, endTs])[1];
   const current = pocketIdx < 0
-    ? D.pockets.reduce((s, p) => s + p.gold, 0)
+    ? D.pockets.reduce((s, p) => state.hidden.has(p.key) ? s : s + p.gold, 0)
     : D.pockets[pocketIdx].gold;
 
   const dayIndex = new Map(starts.map((d, i) => [d, i]));
@@ -1000,20 +1012,37 @@ function buildNav() {
       showPage(id);
       if (id === "ledger") renderLedger();
     })));
+  // Each pocket's hide toggle sits beside its button, not inside it.
+  const row = p => {
+    const toggle = el("button", { type: "button", class: "toggle-vis" });
+    toggle.addEventListener("click", () => toggleHidden(p.key));
+    const r = el("div", { class: "nav-row", "data-key": p.key });
+    r.append(item(p.name, p.key, () => setPocket(p.key), classColor(p)), toggle);
+    return r;
+  };
   document.getElementById("pocket-nav").replaceChildren(
-    item("All characters", "all", () => setPocket("all")),
-    ...D.pockets.map(p => item(p.name, p.key, () => setPocket(p.key), classColor(p))));
+    item("All characters", "all", () => setPocket("all")), ...D.pockets.map(row));
 }
 
 function renderNav() {
   const mark = (id, current, kind) => {
-    for (const b of document.getElementById(id).children) {
+    for (const b of document.getElementById(id).querySelectorAll(".nav-item")) {
       if (b.dataset.key === current) b.setAttribute("aria-current", kind);
       else b.removeAttribute("aria-current");
     }
   };
   mark("page-nav", state.page, "page");
   mark("pocket-nav", state.pocket, "true");
+  for (const row of document.querySelectorAll(".nav-row")) {
+    const hidden = state.hidden.has(row.dataset.key);
+    const name = D.pockets.find(p => p.key === row.dataset.key).name;
+    row.classList.toggle("is-hidden", hidden);
+    const toggle = row.querySelector(".toggle-vis");
+    toggle.textContent = hidden ? "Show" : "Hide";
+    toggle.setAttribute("aria-label", `${hidden ? "Show" : "Hide"} ${name} ${hidden ? "in" : "from"} totals`);
+  }
+  document.querySelector('#pocket-nav .nav-item[data-key="all"]').textContent =
+    state.hidden.size ? `All characters (${state.hidden.size} hidden)` : "All characters";
   const i = RANGES.findIndex(([v]) => v === state.range);
   document.getElementById("range-select").value = String(RANGES[i][0]);
   document.getElementById("range-prev").disabled = i === 0;
@@ -1040,6 +1069,12 @@ function setPocket(key) {
   update();
 }
 
+function toggleHidden(key) {
+  if (!state.hidden.delete(key)) state.hidden.add(key);
+  state.ledgerShown = LEDGER_PAGE;
+  update();
+}
+
 function stepRange(dir) {
   const i = RANGES.findIndex(([v]) => v === state.range) + dir;
   if (i < 0 || i >= RANGES.length) return;
@@ -1048,17 +1083,18 @@ function stepRange(dir) {
   update();
 }
 
-// Character pockets and their line color, built once (pockets don't change).
-const CHAR_POCKETS = D.pockets
+// Character pockets, minus hidden ones (pockets themselves don't change).
+const ALL_CHARS = D.pockets
   .map((p, i) => ({ p, i }))
   .filter(({ p }) => p.kind === "character");
+const visibleChars = () => ALL_CHARS.filter(({ p }) => !state.hidden.has(p.key));
 // What the character chart and its table show: from the first bucket where
 // any character has history, so there are no flat, back-filled lines. When
 // that history is only today, chart today by hour; a single daily point per
 // character would show nothing.
 function charView() {
   const historyStart = lines => {
-    const known = CHAR_POCKETS.map(({ i }) => lines[i].findIndex(v => v !== null)).filter(f => f >= 0);
+    const known = visibleChars().map(({ i }) => lines[i].findIndex(v => v !== null)).filter(f => f >= 0);
     return known.length ? Math.min(...known) : lines[0].length;
   };
   let { starts, hourly, perPocketWorth: lines } = model;
@@ -1072,7 +1108,7 @@ function charView() {
   return {
     hourly,
     buckets: bucketLabels(starts, hourly).slice(from),
-    series: CHAR_POCKETS.map(({ p, i }) => ({
+    series: visibleChars().map(({ p, i }) => ({
       name: p.name,
       color: (TEXT_SHADES[p.cls] || classColor(p)) || "var(--worth)",
       values: lines[i].slice(from),
@@ -1090,7 +1126,7 @@ function renderCharts() {
   // Comparing characters only makes sense across all of them; with one
   // selected, the chart above already shows its balance.
   const panel = document.getElementById("char-worth-panel");
-  panel.hidden = CHAR_POCKETS.length === 0 || model.pocketIdx >= 0;
+  panel.hidden = visibleChars().length === 0 || model.pocketIdx >= 0;
   if (!panel.hidden) {
     const view = charView();
     document.getElementById("char-worth-sub").textContent =
@@ -1137,7 +1173,7 @@ function update() {
   const when = model.hourly ? "Hour" : "Date";
   table(document.getElementById("worth-table"), [[when], [single ? "Balance" : "Net worth", true]],
     model.daily.map((d, i) => [d.tip, money(model.worth[i])]).reverse());
-  if (CHAR_POCKETS.length) {
+  if (visibleChars().length) {
     const view = charView();
     const cell = v => v === null ? "—" : money(v);
     table(document.getElementById("char-worth-table"),
@@ -1154,13 +1190,14 @@ function update() {
 
   const pocketRows = D.pockets
     .map((p, i) => ({ p, f: model.perPocket[i] }))
-    .filter(({ p }) => model.pocketIdx < 0 || p.key === state.pocket);
+    .filter(({ p }) => model.pocketIdx < 0 ? !state.hidden.has(p.key) : p.key === state.pocket);
   table(document.getElementById("pockets-table"),
     [["Name"], ["Realm"], ["Balance", true], ["Income", true], ["Expenses", true], ["Transfers", true], ["Net", true]],
     pocketRows.map(({ p, f }) => [nameNode(p), p.realm, money(p.gold), money(f.inc, true), money(f.exp, true),
       money(f.xfer, true), money(f.inc + f.exp, true)]));
 
   renderLedger();
+  renderMeta();
 }
 
 // Ledger rows after the category and group filters and the search box.
@@ -1244,14 +1281,16 @@ document.getElementById("range-prev").addEventListener("click", () => stepRange(
 document.getElementById("range-next").addEventListener("click", () => stepRange(1));
 document.getElementById("export").addEventListener("click", exportCsv);
 
-const pocketCount = D.pockets.filter(p => p.kind === "character").length;
 // Lead with when the game saved this data, not when the page was built: a page
 // rebuilt from an old save would otherwise look current.
 const stamp = ts => timeFmt.format(new Date(ts * 1000));
-document.getElementById("meta").textContent =
-  `${pocketCount} character${pocketCount === 1 ? "" : "s"} · ` +
-  (D.dataAsOf ? `game data from ${stamp(D.dataAsOf)} · page built ${stamp(D.generatedAt)}`
-    : `page built ${stamp(D.generatedAt)}`);
+function renderMeta() {
+  const count = visibleChars().length;
+  document.getElementById("meta").textContent =
+    `${count} character${count === 1 ? "" : "s"} · ` +
+    (D.dataAsOf ? `game data from ${stamp(D.dataAsOf)} · page built ${stamp(D.generatedAt)}`
+      : `page built ${stamp(D.generatedAt)}`);
+}
 
 loadPrefs();
 buildNav();

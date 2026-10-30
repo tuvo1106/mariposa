@@ -38,11 +38,12 @@ Account-wide SavedVariables `MariposaDB`, written by the game only on logout or 
 
 ```lua
 MariposaDB = {
-  version = 3,
+  version = 4,
   installId = "<hex>",   -- this computer's copy of the data
   questNames = { [questID] = "Title", ... },  -- titles for quest rewards' details
   settings = { debug = false },
   warband = { gold = <copper>, updated = <epoch> },
+  ignored = { ["Name-NormalizedRealm"] = true },  -- forgotten with /mp forget; not tracked
   chars = {
     ["Name-NormalizedRealm"] = {
       name, realm, class, faction, level, gold, lastSeen,
