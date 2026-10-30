@@ -8,6 +8,7 @@ ns.Categories = {
   world_quest  = { label = "World Quests" },
   bonus        = { label = "Bonus Objectives" },
   loot         = { label = "Loot" },
+  pickup       = { label = "Pickup" },
   vendor_sell  = { label = "Vendor Sales" },
   vendor_buy   = { label = "Vendor Purchases" },
   repair       = { label = "Repairs" },
