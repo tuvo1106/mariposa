@@ -38,9 +38,10 @@ Account-wide SavedVariables `MariposaDB`, written by the game only on logout or 
 
 ```lua
 MariposaDB = {
-  version = 1,
+  version = 2,
   settings = { debug = false },
   warband = { gold = <copper>, updated = <epoch> },
+  ignored = { ["Name-NormalizedRealm"] = true },  -- forgotten with /mp forget; not tracked
   chars = {
     ["Name-NormalizedRealm"] = {
       name, realm, class, faction, level, gold, lastSeen,

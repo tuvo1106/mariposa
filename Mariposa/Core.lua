@@ -2,28 +2,43 @@ local _, ns = ...
 
 -- Loaded last: wires events to the modules defined in the other files.
 
-local DB_VERSION = 1
+local DB_VERSION = 2
 
 local frame = CreateFrame("Frame")
 
-local function initDB()
-  MariposaDB = MariposaDB or {}
-  local db = MariposaDB
-  db.version = db.version or DB_VERSION
-  db.settings = db.settings or { debug = false }
-  db.chars = db.chars or {}
-  db.warband = db.warband or {}
-  ns.db = db
-
-  local key = UnitName("player") .. "-" .. GetNormalizedRealmName()
-  local c = db.chars[key] or { seq = 0, tx = {} }
-  db.chars[key] = c
+-- Points ns.char at this character's saved record. A forgotten character gets a
+-- scratch record that is never saved, so every module can keep writing to
+-- ns.char without special cases.
+function ns.AttachChar()
+  local db, key = ns.db, ns.charKey
+  local c = { seq = 0, tx = {} }
+  if not db.ignored[key] then
+    c = db.chars[key] or c
+    db.chars[key] = c
+  end
   c.name = UnitName("player")
   c.realm = GetRealmName()
   c.class = select(2, UnitClass("player"))
   c.faction = UnitFactionGroup("player")
   c.level = UnitLevel("player")
-  ns.char, ns.charKey = c, key
+  ns.char = c
+end
+
+local function initDB()
+  MariposaDB = MariposaDB or {}
+  local db = MariposaDB
+  db.settings = db.settings or { debug = false }
+  db.chars = db.chars or {}
+  db.warband = db.warband or {}
+  db.ignored = db.ignored or {}
+  ns.db = db
+
+  -- Version-gated migrations go here, before the version is stamped. v2 only
+  -- added `ignored`, which the default above covers.
+  db.version = DB_VERSION
+
+  ns.charKey = UnitName("player") .. "-" .. GetNormalizedRealmName()
+  ns.AttachChar()
 
   ns.ownChars = {}
   for k in pairs(db.chars) do
@@ -67,6 +82,10 @@ function handlers.PLAYER_LOGIN()
   end
   c.gold = money
   c.lastSeen = GetServerTime()
+  if ns.db.ignored[ns.charKey] then
+    -- Say so, or a recreated character with a forgotten name looks broken.
+    ns.Print(ns.charKey .. " was forgotten and isn't tracked. /mp track to resume.")
+  end
   ns.lastMoney = money
   ns.sessionStart = GetServerTime()
   snapshotWarband()

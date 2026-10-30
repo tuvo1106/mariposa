@@ -105,6 +105,59 @@ function commands.log(arg)
   end
 end
 
+-- The saved character matching "Name" or "Name-Realm", or nil.
+local function findChar(text)
+  local canonical = ns.CanonicalName(text)
+  local byName
+  for key, c in pairs(ns.db.chars) do
+    if ns.CanonicalName(key) == canonical then return key end
+    if c.name and c.name:lower() == text:lower() then
+      -- Same name on two realms is ambiguous; make the user add the realm.
+      byName = byName == nil and key or false
+    end
+  end
+  return byName or nil
+end
+
+function commands.forget(arg)
+  local target, confirmed = arg:match("^(.-)%s+confirm$")
+  target = target or arg
+  if target == "" then
+    ns.Print("usage: /mp forget Name[-Realm]")
+    return
+  end
+  local key = findChar(target)
+  if not key then
+    ns.Print("no tracked character matches \"" .. target .. "\" (realm needed if two share a name)")
+    return
+  end
+  local c = ns.db.chars[key]
+  if not confirmed then
+    ns.Print(string.format("this deletes %s's %d recorded transactions and stops tracking them.", key, #c.tx))
+    print("  To proceed: /mp forget " .. key .. " confirm")
+    return
+  end
+  ns.db.chars[key] = nil
+  ns.db.ignored[key] = true
+  ns.ownChars[ns.CanonicalName(key)] = nil
+  if key == ns.charKey then ns.AttachChar() end
+  ns.Print("stopped tracking " .. key .. (key == ns.charKey and " (log in on it and /mp track to resume)" or ""))
+end
+
+-- Undoes forget for the character you're logged into.
+function commands.track()
+  if not ns.db.ignored[ns.charKey] then
+    ns.Print(ns.charKey .. " is already tracked")
+    return
+  end
+  ns.db.ignored[ns.charKey] = nil
+  ns.AttachChar()
+  ns.char.gold = GetMoney()
+  ns.char.lastSeen = GetServerTime()
+  ns.ownChars[ns.CanonicalName(ns.charKey)] = ns.charKey
+  ns.Print("tracking " .. ns.charKey .. " again, starting from now")
+end
+
 function commands.debug()
   ns.db.settings.debug = not ns.db.settings.debug
   ns.Print("debug " .. (ns.db.settings.debug and "on" or "off"))
@@ -117,6 +170,8 @@ function commands.help()
   print("  /mp week         last 7 days, all characters")
   print("  /mp chars        gold per character + warband bank")
   print("  /mp log [n]      last n transactions on this character")
+  print("  /mp forget Name  delete a character's ledger and stop tracking it")
+  print("  /mp track        resume tracking this character after forget")
   print("  /mp debug        print every transaction as it's recorded")
 end
 

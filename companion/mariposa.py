@@ -292,9 +292,15 @@ def import_db(conn: sqlite3.Connection, account: str, data: dict) -> int:
         gone = [k for (k,) in conn.execute(
             f"SELECT char_key FROM characters WHERE account = ? AND char_key NOT IN ({placeholders})",
             (account, *incoming_keys))]
-        for k in gone:
-            conn.execute("DELETE FROM transactions WHERE char_key = ?", (k,))
-            conn.execute("DELETE FROM characters WHERE char_key = ?", (k,))
+    else:
+        gone = []
+    # Characters the player told the addon to forget (`/mp forget`) are gone from
+    # the file too, but with no others left the prune above is skipped.
+    gone += [k for (k,) in conn.execute("SELECT char_key FROM characters WHERE account = ?", (account,))
+             if k in (db.get("ignored") or {})]
+    for k in gone:
+        conn.execute("DELETE FROM transactions WHERE char_key = ?", (k,))
+        conn.execute("DELETE FROM characters WHERE char_key = ?", (k,))
 
     warband = db.get("warband") or {}
     if "gold" in warband:

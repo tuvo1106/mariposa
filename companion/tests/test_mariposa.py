@@ -145,6 +145,16 @@ class ResetAwareImportTest(unittest.TestCase):
         self.assertEqual(self.conn.execute(
             "SELECT COUNT(*) FROM transactions WHERE char_key = 'B-WyrmrestAccord'").fetchone()[0], 0)
 
+    def test_forgotten_character_is_dropped_even_if_it_was_the_last(self):
+        data = self.data([(1, 10, 5, "loot")])
+        self.imp(data)
+        self.assertEqual(self.names(), {"Cynze"})
+        [key] = data["MariposaDB"]["chars"]
+        data["MariposaDB"] = {"chars": {}, "ignored": {key: True}}  # /mp forget on the only character
+        self.imp(data)
+        self.assertEqual(self.names(), set())
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0], 0)
+
     def test_empty_chars_does_not_wipe(self):
         self.imp(self.data([(1, 10, 5, "loot")]))
         # A file with no characters (truncated or mid-write) must not prune.

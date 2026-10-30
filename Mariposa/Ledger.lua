@@ -21,6 +21,8 @@ end
 
 function Ledger:Record(cat, amount, ref)
   if amount == 0 then return end
+  -- A forgotten character has only a scratch record; don't accumulate into it.
+  if ns.db.ignored[ns.charKey] then return end
   local c = ns.char
   c.seq = c.seq + 1
   c.tx[#c.tx + 1] = {
