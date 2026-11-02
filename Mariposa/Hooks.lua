@@ -37,6 +37,16 @@ if C_Container and C_Container.UseContainerItem then
   hooksecurefunc(C_Container, "UseContainerItem", expectContainerGold)
 end
 
+-- Item upgrades ---------------------------------------------------------------
+-- The gold cost isn't readable up front, so claim the next outgoing gold. The
+-- upgrade window context catches it if this hook doesn't fire.
+
+if C_ItemUpgrade and C_ItemUpgrade.UpgradeItem then
+  hooksecurefunc(C_ItemUpgrade, "UpgradeItem", function()
+    expect("item_upgrade", nil, nil, -1, OPEN_CLAIM_TTL)
+  end)
+end
+
 -- Auction house ---------------------------------------------------------------
 
 if C_AuctionHouse then

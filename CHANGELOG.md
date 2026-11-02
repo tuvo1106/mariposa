@@ -41,6 +41,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Dashboard: Hide/Show buttons in the sidebar leave a character or warband bank out of the
   all-characters totals, charts, tables and ledger. The choice is remembered in the browser.
 - Addon: a Pickup category, for gold assigned to it by hand.
+- Addon: gold spent on item upgrades is tracked as Item Upgrades instead of Other.
 
 ### Changed
 
