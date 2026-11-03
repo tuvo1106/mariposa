@@ -30,7 +30,7 @@ end
 -- Most specific first: taking mail at a mailbox beside a vendor counts as mail.
 local priority = {
   "loot", "mail", "auction", "trade", "bank", "guildbank",
-  "crafting", "merchant", "taxi", "transmog", "barber", "trainer",
+  "crafting", "upgrade", "merchant", "taxi", "transmog", "barber", "trainer",
 }
 
 local categoryFor = {
@@ -43,6 +43,7 @@ local categoryFor = {
   -- Money earned at the crafting-order kiosk is a commission for fulfilling an
   -- order; money spent is the tip/deposit for placing one.
   crafting  = function(d) return d > 0 and "crafting_commission" or "crafting_order" end,
+  upgrade   = function() return "item_upgrade" end,
   merchant  = function(d)
     if d < 0 and InRepairMode() then return "repair" end
     return d > 0 and "vendor_sell" or "vendor_buy"
@@ -81,6 +82,7 @@ mapInteraction("GuildBanker", "guildbank")
 mapInteraction("Banker", "bank")
 mapInteraction("AccountBanker", "bank")
 mapInteraction("CraftingOrders", "crafting")
+mapInteraction("ItemUpgrade", "upgrade")
 
 function Context:OnInteraction(interactionType, isOpen)
   local ctx = interactions[interactionType]
@@ -103,6 +105,7 @@ Context.openEvents = {
   BANKFRAME_OPENED = "bank",
   CRAFTINGORDERS_SHOW_CRAFTER = "crafting",
   CRAFTINGORDERS_SHOW_CUSTOMER = "crafting",
+  ITEM_UPGRADE_MASTER_OPENED = "upgrade",
   LOOT_OPENED = "loot",
 }
 
@@ -119,5 +122,6 @@ Context.closeEvents = {
   BANKFRAME_CLOSED = "bank",
   CRAFTINGORDERS_HIDE_CRAFTER = "crafting",
   CRAFTINGORDERS_HIDE_CUSTOMER = "crafting",
+  ITEM_UPGRADE_MASTER_CLOSED = "upgrade",
   LOOT_CLOSED = "loot",
 }
