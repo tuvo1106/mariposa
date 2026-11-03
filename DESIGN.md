@@ -23,7 +23,9 @@ infers the reason from what happened around the change, in this order
      their direction).
 2. **Context.** Whatever is left is attributed to the open window (merchant, AH, mail,
    trade, flight master, …), with a 2 s grace after it closes.
-3. **Fallback.** `other`, recorded with the zone's map ID so it can be re-categorized later.
+3. **Fallback.** A gain inside a delve is `pickup`, since delves pay out gold with no loot
+   window. Anything else is `other`, recorded with the zone's map ID so it can be
+   re-categorized later.
 
 Changes landing within 0.3 s are batched, so a quest reward and loot that arrive together
 are split correctly.

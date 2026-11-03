@@ -107,7 +107,7 @@ function Ledger:Flush()
   end
 
   if remaining ~= 0 then
-    self:Record(ns.Context:Resolve(remaining) or "other", remaining)
+    self:Record(ns.Context:Resolve(remaining) or ns.Context:Fallback(remaining) or "other", remaining)
   end
 end
 

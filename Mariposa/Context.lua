@@ -61,6 +61,26 @@ function Context:Resolve(delta)
   end
 end
 
+-- Delves pay out gold that's picked up with no loot window or other cue, so it
+-- had been landing in Other. Checked by API and by difficulty, since the gold
+-- also comes after a delve is complete.
+local DELVE_DIFFICULTY = 208
+
+local function inDelve()
+  local party = C_PartyInfo
+  if party and ((party.IsDelveInProgress and party.IsDelveInProgress())
+      or (party.IsDelveComplete and party.IsDelveComplete())) then
+    return true
+  end
+  local difficultyID = select(3, GetInstanceInfo())
+  return difficultyID == DELVE_DIFFICULTY
+end
+
+-- The category for gold nothing else explains, before giving up on "other".
+function Context:Fallback(delta)
+  if delta > 0 and inDelve() then return "pickup" end
+end
+
 -- Modern clients route most NPC windows through
 -- PLAYER_INTERACTION_MANAGER_FRAME_SHOW/HIDE. Names are looked up defensively
 -- so a renamed or missing enum value doesn't break loading.
