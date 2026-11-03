@@ -40,7 +40,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   resumes. The importer drops forgotten characters from the database.
 - Dashboard: Hide/Show buttons in the sidebar leave a character or warband bank out of the
   all-characters totals, charts, tables and ledger. The choice is remembered in the browser.
-- Addon: a Pickup category, for gold assigned to it by hand.
+- Addon: a Pickup category. Gold picked up in delves, with no loot window or other cue, is
+  filed there instead of Other.
 - Addon: gold spent on item upgrades is tracked as Item Upgrades instead of Other.
 
 ### Changed
