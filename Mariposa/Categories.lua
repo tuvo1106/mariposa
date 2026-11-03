@@ -28,6 +28,7 @@ ns.Categories = {
   training     = { label = "Training" },
   crafting_order      = { label = "Crafting Orders" },
   crafting_commission = { label = "Crafting Commissions" },
+  item_upgrade = { label = "Item Upgrades" },
   container    = { label = "Reward Bags" },
   guild_bank   = { label = "Guild Bank" },
   xfer_warband = { label = "Warband Bank", transfer = true },
