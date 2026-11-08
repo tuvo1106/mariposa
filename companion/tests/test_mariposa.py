@@ -350,6 +350,48 @@ class GroupTest(unittest.TestCase):
         self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], mariposa.SCHEMA_VERSION)
 
 
+class DelveMapTest(unittest.TestCase):
+    """Gains left as Other on a known delve map count as Pickup in reports."""
+
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        mariposa.init_schema(self.conn)
+        data = install_file("deck", {"Cynze-WyrmrestAccord": char_data(
+            [(1, 10, 500, "other"), (2, 20, -300, "other"), (3, 30, 700, "other"), (4, 40, 50, "loot")],
+            gold=950, last_seen=40)})
+        for t, m in zip(data["MariposaDB"]["chars"]["Cynze-WyrmrestAccord"]["tx"], (2647, 2647, 2393, 2647)):
+            t["m"] = m
+        mariposa.import_db(self.conn, "ACCT", data)
+
+    def categories(self):
+        return [r[0] for r in self.conn.execute("SELECT category FROM ledger ORDER BY ts")]
+
+    def test_only_gains_on_delve_maps_become_pickup(self):
+        self.assertEqual(self.categories(), ["other", "other", "other", "loot"])
+        self.conn.execute("INSERT INTO delve_maps VALUES (2647)")
+        # The loss on the delve map and the gain elsewhere stay Other.
+        self.assertEqual(self.categories(), ["pickup", "other", "other", "loot"])
+
+    def test_stored_category_is_untouched(self):
+        self.conn.execute("INSERT INTO delve_maps VALUES (2647)")
+        self.assertEqual(self.conn.execute("SELECT category FROM transactions WHERE seq = 1").fetchone()[0], "other")
+
+    def test_flag_is_remembered_across_runs(self):
+        import tempfile
+        from contextlib import closing
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            sv = root / "WTF" / "Account" / "MAIN" / "SavedVariables"
+            sv.mkdir(parents=True)
+            (sv / "Mariposa.lua").write_text('MariposaDB = { ["chars"] = {} }')
+            db = root / "m.db"
+            mariposa.main(["--wtf", str(root / "WTF"), "--db", str(db), "--delve-map", "2647", "--delve-map", "2545"])
+            mariposa.main(["--wtf", str(root / "WTF"), "--db", str(db)])
+            with closing(sqlite3.connect(db)) as conn:
+                self.assertEqual([m for (m,) in conn.execute("SELECT map_id FROM delve_maps ORDER BY map_id")],
+                                 [2545, 2647])
+
+
 class FindImportsTest(unittest.TestCase):
     def test_accounts_from_subfolders_or_the_single_local_account(self):
         import tempfile

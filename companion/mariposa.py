@@ -77,13 +77,22 @@ CREATE TABLE IF NOT EXISTS quest_names (
     id   TEXT PRIMARY KEY,  -- the quest ID as stored in transactions.ref
     name TEXT NOT NULL
 );
+-- Maps known to be delves (added with --delve-map). Gold picked up in a delve
+-- has no loot window, so addons older than the delve check filed it as Other.
+CREATE TABLE IF NOT EXISTS delve_maps (
+    map_id INTEGER PRIMARY KEY
+);
 -- What every report reads: adjustments net of what other installs explain,
--- dropping those that are fully explained, and quest rewards showing the
--- quest's title instead of its ID once it's known. Recreated on every run, so
--- an older database picks up changes to it.
+-- dropping those that are fully explained; a gain left as Other on a known
+-- delve map counted as Pickup; and quest rewards showing the quest's title
+-- instead of its ID once it's known. Recreated on every run, so an older
+-- database picks up changes to it. The stored category is never changed.
 DROP VIEW IF EXISTS ledger;
 CREATE VIEW ledger AS
-    SELECT t.char_key, t.source, t.seq, t.ts, t.amount - t.explained AS amount, t.category,
+    SELECT t.char_key, t.source, t.seq, t.ts, t.amount - t.explained AS amount,
+           CASE WHEN t.category = 'other' AND t.amount > 0
+                 AND t.map_id IN (SELECT map_id FROM delve_maps) THEN 'pickup'
+                ELSE t.category END AS category,
            COALESCE(q.name, t.ref) AS ref, t.map_id, t.grp
     FROM transactions t
     LEFT JOIN quest_names q
@@ -521,6 +530,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--wtf", type=Path, help="path to _retail_/WTF (auto-detected if omitted)")
     ap.add_argument("--db", type=Path, default=REPO / "mariposa.db",
                     help="SQLite output (default: mariposa.db in the repo root)")
+    ap.add_argument("--delve-map", type=int, action="append", default=[], metavar="MAP_ID",
+                    help="remember MAP_ID as a delve, so gains left as Other there count as Pickup "
+                         "(repeatable; kept in the database)")
     ap.add_argument("--imports", type=Path,
                     help="folder of Mariposa.lua files copied from other computers "
                          "(default: imports in the repo root, unless --wtf is given)")
@@ -559,6 +571,11 @@ def main(argv: list[str] | None = None) -> int:
             listed |= chars
             print(f"{label} ({account}): {new_tx} new transactions")
         reconcile(conn, listed)
+        if args.delve_map:
+            conn.executemany("INSERT OR IGNORE INTO delve_maps VALUES (?)", [(m,) for m in args.delve_map])
+            conn.commit()
+            known = [m for (m,) in conn.execute("SELECT map_id FROM delve_maps ORDER BY map_id")]
+            print(f"delve maps: {', '.join(map(str, known))}")
         if args.csv:
             export_csv(conn, args.csv)
             print(f"wrote {args.csv}")
