@@ -43,6 +43,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Addon: a Pickup category. Gold picked up in delves, with no loot window or other cue, is
   filed there instead of Other.
 - Addon: gold spent on item upgrades is tracked as Item Upgrades instead of Other.
+- Companion: `--delve-map MAP_ID` remembers a map as a delve, so gains recorded there as
+  Other, including by older addon versions, count as Pickup.
 
 ### Changed
 

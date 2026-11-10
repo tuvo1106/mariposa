@@ -25,7 +25,8 @@ infers the reason from what happened around the change, in this order
    trade, flight master, …), with a 2 s grace after it closes.
 3. **Fallback.** A gain inside a delve is `pickup`, since delves pay out gold with no loot
    window. Anything else is `other`, recorded with the zone's map ID so it can be
-   re-categorized later.
+   re-categorized later. The companion uses that: maps registered with `--delve-map` count
+   a gain left as `other` there as `pickup`, which covers data from older addon versions.
 
 Changes landing within 0.3 s are batched, so a quest reward and loot that arrive together
 are split correctly.

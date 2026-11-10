@@ -44,6 +44,13 @@ computer's file into the `imports` folder in this repo, then run the importer as
 Use the latest addon on every computer, so each file identifies itself and each login
 records enough for gold to be counted once.
 
+Older addon versions filed gold picked up in delves as Other. Tell the importer which maps
+are delves, once, and those gains count as Pickup in every report from then on:
+
+```bash
+python3 companion/mariposa.py --delve-map 2647 --delve-map 2545
+```
+
 To work on the dashboard without playing, generate synthetic data (written to the
 gitignored `synthetic/` folder):
 
