@@ -68,6 +68,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Dashboard: the Balance by character legend wraps onto more lines instead of running off
+  the side of its panel when there are many characters.
+- Dashboard: on medium-width windows, the notes beside the Overview totals move under their
+  value boxes instead of spilling past the panel's edge.
 - Addon: `/mp log` and debug messages show quest names, like the dashboard, instead of quest
   IDs.
 - Addon: net worth no longer reads 0 after logging out. The logout snapshot overwrote the
